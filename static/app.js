@@ -653,7 +653,7 @@ function renderDays(days) {
     const row = document.createElement('article');
     row.className = 'day';
 
-    const date = new Date(day.date);
+    const date = new Date(`${day.date}T00:00:00`); // no offset: local time, matches fullDay()
     const temps = day.partial
       ? `<span class="lo">${EFW_I18N.tempShort(day.temp_min)}–${EFW_I18N.tempShort(day.temp_max)}</span>`
       : `<strong>${EFW_I18N.tempShort(day.temp_max)}</strong> <span class="lo">${EFW_I18N.tempShort(day.temp_min)}</span>`;
