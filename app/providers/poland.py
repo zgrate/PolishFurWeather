@@ -6,11 +6,12 @@ Shaped to match what those DWD modules returned (``fetch_current`` ->
 "station_name"}``, etc.) so service.py's own logic barely has to change --
 only its imports.
 
-Current conditions combine two IMGW sources per
+Current conditions combine three sources per
 ``POLRAD_SRI_Implementation_Summary.md``: SYNOP for temperature/humidity/wind/
-pressure, POLRAD SRI radar for precipitation *intensity*. SYNOP's own
-``suma_opadu`` (WO6G, a 6h gauge total) never reaches ``WeatherPoint`` -- see
-``app/providers/imgw/observations.py``.
+pressure, POLRAD SRI radar for precipitation *intensity*, and Open-Meteo's
+nearest hourly forecast point for wind gust and weather code -- SYNOP reports
+neither at all. SYNOP's own ``suma_opadu`` (WO6G, a 6h gauge total) never
+reaches ``WeatherPoint`` -- see ``app/providers/imgw/observations.py``.
 
 Forecast is Open-Meteo only for now: IMGW's own 60h COSMO 2.8km model
 (app/providers/imgw/cosmo.py) is not wired into it, because each of its
@@ -49,6 +50,39 @@ def day_floor(moment: datetime) -> datetime:
     )
 
 
+def _nearest_point(points: List[WeatherPoint], moment: datetime) -> Optional[WeatherPoint]:
+    if not points:
+        return None
+    return min(points, key=lambda p: abs((p.time - moment).total_seconds()))
+
+
+def _with_open_meteo_extras(point: WeatherPoint, lat: float, lon: float) -> WeatherPoint:
+    """Fills ``wind_gust``/``weather_code`` from Open-Meteo's nearest hourly point.
+
+    SYNOP never reports either field at all (see ``app/providers/imgw/observations.py``),
+    so borrow them from the same Open-Meteo series already fetched for the forecast
+    card instead of leaving "porywy"/"warunki" permanently blank on the frontend.
+    """
+    if point.wind_gust is not None and point.weather_code is not None:
+        return point
+
+    forecast_points = open_meteo_forecast.fetch_forecast(lat, lon)
+    nearest = _nearest_point(forecast_points, point.time)
+    if nearest is None:
+        return point
+
+    filled = False
+    if point.wind_gust is None and nearest.wind_gust is not None:
+        point.wind_gust = nearest.wind_gust
+        filled = True
+    if point.weather_code is None and nearest.weather_code is not None:
+        point.weather_code = nearest.weather_code
+        filled = True
+    if filled:
+        point.source = f"{point.source}+open-meteo"
+    return point
+
+
 def _with_radar_precipitation(point: WeatherPoint, lat: float, lon: float) -> WeatherPoint:
     """Overrides ``precipitation`` with the POLRAD SRI rate at the venue.
 
@@ -72,7 +106,8 @@ def fetch_current(lat: Optional[float] = None, lon: Optional[float] = None) -> W
     lat = lat if lat is not None else settings.location.latitude
     lon = lon if lon is not None else settings.location.longitude
     point = synop.fetch_current()
-    return _with_radar_precipitation(point, lat, lon)
+    point = _with_radar_precipitation(point, lat, lon)
+    return _with_open_meteo_extras(point, lat, lon)
 
 
 def fetch_recent() -> List[WeatherPoint]:
