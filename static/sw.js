@@ -17,8 +17,8 @@
    was kept, and a v1 entry without that stamp would be read as live data. */
 const CACHE = 'efw-v2';
 
-/* Enough to draw the page and say something true. Radar frames, model images
-   and the video are left out on purpose: they are large, they change
+/* Enough to draw the page and say something true. The radar/forecast-map
+   iframes and the video are left out on purpose: they are large, they change
    constantly, and a stale radar picture is worse than a missing one. */
 const SHELL = [
   '/',
@@ -27,16 +27,14 @@ const SHELL = [
   '/chart.js',
   '/i18n.js',
   '/loading.js',
-  '/vendor/leaflet.js',
-  '/vendor/leaflet.css',
 ];
 
 /* Paths never worth keeping a copy of.
 
    /api/load is the live "is the site busy" signal and is served no-store on
-   purpose -- a stale "all quiet" is worse than no answer. The image endpoints
-   and the media directory are heavy and short-lived. */
-const SKIP = [/^\/api\/load$/, /^\/api\/(radar|model|pollen)\.png$/, /^\/media\//];
+   purpose -- a stale "all quiet" is worse than no answer. The pollen stub and
+   the media directory are heavy and short-lived. */
+const SKIP = [/^\/api\/load$/, /^\/api\/pollen\.png$/, /^\/media\//];
 
 /* How long to wait for the network before reaching for the cache. Long enough
    that a merely slow connection still wins and the reader gets fresh data,

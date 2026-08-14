@@ -30,21 +30,6 @@ ENDPOINTS = (
     "/api/v1/overview",
 )
 
-RADAR_INFO = {
-    "provider": "imgw-polrad",
-    "product": "COMPO_SRI.comp.sri",
-    "available": True,
-    "valid_time": "2026-08-13T12:00:00+00:00",
-    "bbox": {"min_lat": 52.0, "min_lon": 18.0, "max_lat": 54.0, "max_lon": 20.0},
-    "image_url": "/api/radar.png",
-    "attribution": (
-        "Źródłem pochodzenia danych jest Instytut Meteorologii i Gospodarki Wodnej "
-        "– Państwowy Instytut Badawczy."
-    ),
-    "refresh_seconds": 240,
-}
-
-
 @pytest.fixture(autouse=True)
 def clean_state(monkeypatch):
     from app.providers.http import cache, field_cache
@@ -57,11 +42,9 @@ def clean_state(monkeypatch):
     monkeypatch.setattr(settings.imgw, "station_id", "12375")
     monkeypatch.setattr(settings.imgw, "station_name", "Kraków-Balice")
     monkeypatch.setattr(settings.imgw, "teryt", ["1261"])
-    # The summary behind every v1 endpoint reads pollen and the radar block,
-    # both of which cost a live fetch. Not from here it is not: the suite
-    # stays offline.
+    # The summary behind every v1 endpoint reads pollen, which costs a live
+    # fetch. Not from here it is not: the suite stays offline.
     monkeypatch.setattr(poland, "pollen_at_point", lambda *a, **k: [])
-    monkeypatch.setattr(poland, "radar_info", lambda *a, **k: dict(RADAR_INFO))
     yield
     cache.clear()
     field_cache.clear()
@@ -284,6 +267,14 @@ def test_german_translates_generated_text(client):
     assert body["band_key"] in set(keys)
 
 
+def test_polish_translates_generated_text(client):
+    body = client.get("/api/v1/fsi?lang=pl").json()
+    assert body["meta"]["language"] == "pl"
+    keys = ("excellent", "good", "fair", "poor", "bad")
+    assert body["band"] in {app_i18n.t("pl", f"band.{key}") for key in keys}
+    assert body["band_key"] in set(keys)
+
+
 def test_an_unknown_language_is_rejected(client):
     assert client.get("/api/v1/fsi?lang=fr").status_code == 422
 
@@ -335,12 +326,12 @@ def test_openapi_documents_the_public_surface(client):
 def test_the_schema_publishes_nothing_but_the_contract(client):
     """What is documented is what someone may build on.
 
-    The aggregate the frontend reads and the images the map card draws are still
-    reachable -- the site needs them -- but they are nobody's contract, and a
-    path in the schema is an invitation to depend on it.
+    The aggregate the frontend reads is still reachable -- the site needs it --
+    but it is nobody's contract, and a path in the schema is an invitation to
+    depend on it.
     """
     schema = client.get("/openapi.json").json()
-    for path in ("/api/summary", "/api/model", "/api/model.png", "/api/pollen.png"):
+    for path in ("/api/summary", "/api/pollen.png"):
         assert path not in schema["paths"], f"{path} should not be published"
     assert client.get("/api/summary").status_code == 200
 

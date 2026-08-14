@@ -33,7 +33,7 @@ router = APIRouter(prefix="/api/v1", tags=["Public API v1"])
 #: consumer nothing.
 CACHE_SECONDS = 120
 
-LanguageQuery = Query("en", pattern="^(en|de)$", description="Language for generated text")
+LanguageQuery = Query("en", pattern="^(en|de|pl)$", description="Language for generated text")
 
 #: From the km/h the payload speaks in. The frontend keeps its own copy of these
 #: two numbers in i18n.js: it already holds every hour of the forecast, so making

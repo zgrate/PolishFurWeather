@@ -675,14 +675,37 @@ body {
 .day .hilo .worst strong { color: var(--hot-pink); }
 .day .hilo .avg { margin-left: auto; }
 
-/* ---------- Radar ---------- */
+/* ---------- Radar / forecast map embeds ---------- */
 
 .map { height: 380px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); }
-/* Only added on touch screens, where one-finger dragging is off; see addMapHint. */
-.map-hint { margin: 0.45rem 0 0; font-size: 0.8rem; color: var(--muted); }
-.leaflet-container { border-radius: 10px; font: inherit; background: var(--bg); }
 
-.radar-controls { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin: 0.65rem 0 0; font-size: 0.85rem; color: var(--muted); }
+.radar-embed-wrap,
+.windy-embed-wrap { position: relative; padding: 0; overflow: hidden; }
+.radar-embed,
+.windy-embed { width: 100%; height: 100%; border: 0; border-radius: 10px; }
+/* Coarse pointers get the iframe non-interactive until the first tap: a
+   cross-origin iframe that grabs touch drags would trap the page from
+   scrolling past it. Shared by the radar and forecast-map cards. */
+.radar-tap-hint,
+.windy-tap-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1rem;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.radar-tap-hint[hidden],
+.windy-tap-hint[hidden] { display: none; }
+
+.radar-controls,
+.windy-controls { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin: 0.65rem 0 0; font-size: 0.85rem; color: var(--muted); }
 .radar-controls label { display: flex; align-items: center; gap: 0.4rem; cursor: pointer; }
 
 /* ---------- Footer / errors ---------- */
@@ -885,121 +908,6 @@ body {
 .unit-switch .k::after { content: ':'; }
 
 /* Inside the tinted panel the "now" outline must follow the contrast ink. */
-
-
-/* ---------- ICON model card ---------- */
-
-.model-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.7rem; }
-
-.model-tabs button {
-  border: 1px solid var(--border);
-  background: var(--card);
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.85rem;
-  padding: 0.35rem 0.8rem;
-  border-radius: 999px;
-  cursor: pointer;
-}
-.model-tabs button:hover { color: var(--text); }
-.model-tabs button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-
-.model-figure { position: relative; }
-#model-map { height: 330px; }
-
-.model-status { margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--muted); }
-
-/* ---------- Model: forecast hours ---------- */
-
-.model-step { display: flex; align-items: flex-start; gap: 0.5rem; margin-top: 0.8rem; }
-
-/* Every hour at once, wrapped into a block. A scrolling row hid most of the
-   forecast behind a gesture; laid out as a grid the whole 48 hours is one
-   glance, and each cell keeps its place from one visit to the next. */
-.model-step .hours {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(2.55rem, 1fr));
-  gap: 3px;
-}
-
-.model-step .hours button {
-  border: 1px solid var(--border);
-  background: var(--card);
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-  padding: 0.24rem 0.1rem;
-  border-radius: 6px;
-  cursor: pointer;
-  text-align: center;
-}
-.model-step .hours button:hover { color: var(--text); border-color: var(--muted); }
-.model-step .hours button.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 700;
-}
-
-.model-step .play {
-  flex: 0 0 auto;
-  width: 2.1rem;
-  height: 2.1rem;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  background: var(--card);
-  color: var(--text);
-  font-size: 0.9rem;
-  line-height: 1;
-  cursor: pointer;
-}
-.model-step .play:hover { border-color: var(--accent); }
-.model-step .play.is-playing { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-
-/* ---------- Model: the key ---------- */
-
-.model-legend { margin: 0.9rem 0 0; font-size: 0.82rem; color: var(--text); display: grid; gap: 0.7rem; }
-.model-legend .row { display: flex; align-items: flex-start; gap: 0.6rem; }
-.model-legend .name { flex: 0 0 7rem; padding-top: 1px; color: var(--muted); font-size: 0.78rem; }
-.model-legend .bar { flex: 1; min-width: 0; }
-
-/* The field is drawn in steps, so the key is too: one block per band, over the
-   same dark backdrop the map has, because the blocks carry the map's opacity. */
-.model-legend .swatches {
-  display: flex;
-  height: 14px;
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--inset);
-  border: 1px solid var(--border);
-}
-.model-legend .swatches span { flex: 1; min-width: 0; }
-.model-legend .swatches span + span { border-left: 1px solid rgb(0 0 0 / 22%); }
-.model-legend .scale { display: block; height: 14px; border-radius: 4px; border: 1px solid var(--border); }
-
-/* Numbers sit on the boundaries between blocks, so they are positioned rather
-   than laid out; the two at the ends are pulled inside the bar. */
-.model-legend .marks { position: relative; height: 1.15em; margin-top: 0.25rem; }
-.model-legend .marks span {
-  position: absolute;
-  transform: translateX(-50%);
-  font-size: 0.7rem;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  color: var(--muted);
-}
-.model-legend .marks span.first { transform: none; }
-.model-legend .marks span.last { transform: translateX(-100%); }
-
-/* Cloud eighths are names for the blocks themselves, not for their edges. */
-.model-legend .marks.cells { display: flex; }
-.model-legend .marks.cells span { position: static; flex: 1; transform: none; text-align: center; }
-
-.model-legend .note { color: var(--muted); font-size: 0.78rem; }
-.model-legend .note .arrow { color: var(--text); }
 
 @media (max-width: 480px) {
   .day .temps { margin-left: 0; }

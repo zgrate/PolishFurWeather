@@ -172,21 +172,6 @@ def test_value_at_outside_the_grid_is_none(tmp_path):
     assert decoded.value_at(far_lat, far_lon) is None
 
 
-# ---------------------------------------------------------------- sample_grid
-
-
-def test_sample_grid_resamples_the_composite_onto_an_output_bbox(tmp_path):
-    data = np.arange(GRID * GRID, dtype=np.float64).reshape(GRID, GRID)
-    decoded = radar._decode(_payload(tmp_path, data=data, gain=1.0, offset=0.0))
-    lon0, lat0 = _pixel_lonlat(0, 0)
-    lon1, lat1 = _pixel_lonlat(GRID - 1, GRID - 1)
-    min_lat, max_lat = sorted((lat0, lat1))
-    min_lon, max_lon = sorted((lon0, lon1))
-    resampled = decoded.sample_grid(width=GRID, height=GRID, bbox=(min_lat, min_lon, max_lat, max_lon))
-    assert resampled.shape == (GRID, GRID)
-    assert np.isfinite(resampled).any()
-
-
 # -------------------------------------------------------------------- _fresh
 
 
@@ -261,53 +246,3 @@ def test_precipitation_intensity_reads_the_venue_point(monkeypatch, tmp_path):
     value, valid_time = radar.precipitation_intensity(lat, lon)
     assert value == pytest.approx(8.0)
     assert valid_time == decoded.valid_time
-
-
-# ------------------------------------------------------------------------ render
-
-
-def test_render_returns_none_when_radar_unavailable(monkeypatch):
-    monkeypatch.setattr(radar, "latest_field", lambda: None)
-    assert radar.render((48.0, 17.0, 53.0, 22.0), width=10, height=10) is None
-
-
-def test_render_produces_a_png_with_min_max_over_the_composite(monkeypatch, tmp_path):
-    data = np.full((GRID, GRID), 3.0)
-    decoded = radar._decode(_payload(tmp_path, data=data, gain=1.0, offset=0.0))
-    monkeypatch.setattr(radar, "latest_field", lambda: decoded)
-    lon0, lat0 = _pixel_lonlat(0, 0)
-    lon1, lat1 = _pixel_lonlat(GRID - 1, GRID - 1)
-    min_lat, max_lat = sorted((lat0, lat1))
-    min_lon, max_lon = sorted((lon0, lon1))
-    result = radar.render((min_lat, min_lon, max_lat, max_lon), width=GRID, height=GRID)
-    assert result is not None
-    assert result["png"].startswith(b"\x89PNG")
-    assert result["valid"] == decoded.valid_time
-    assert result["min"] == pytest.approx(3.0)
-    assert result["max"] == pytest.approx(3.0)
-
-
-# --------------------------------------------------------------------- misc
-
-
-def test_bbox_around_is_symmetric_around_the_venue():
-    bbox = radar.bbox_around(50.0, 19.0, span_deg=1.0)
-    min_lat, min_lon, max_lat, max_lon = bbox
-    assert max_lat - 50.0 == pytest.approx(50.0 - min_lat)
-    assert max_lon - 19.0 == pytest.approx(19.0 - min_lon)
-
-
-def test_radar_info_reports_unavailable_without_a_frame(monkeypatch):
-    monkeypatch.setattr(radar, "latest_field", lambda: None)
-    info = radar.radar_info()
-    assert info["available"] is False
-    assert info["valid_time"] is None
-    assert "IMGW" in info["attribution"] or "Instytut Meteorologii" in info["attribution"]
-
-
-def test_radar_info_reports_the_valid_time_when_available(monkeypatch, tmp_path):
-    decoded = radar._decode(_payload(tmp_path))
-    monkeypatch.setattr(radar, "latest_field", lambda: decoded)
-    info = radar.radar_info()
-    assert info["available"] is True
-    assert info["valid_time"] == decoded.valid_time.isoformat()

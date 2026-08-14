@@ -732,613 +732,105 @@ function renderDays(days) {
   }
 }
 
-/* ------------------------------------------------------------------ radar */
+/* ---------------------------------------------------------------- embeds */
 
-let map = null;
-let radarLayer = null;
-let baseLayer = null;
-let radarMeter = null;
-let radarBounds = null; // which rectangle the overlay is currently hung on
-
-/* The festival palette is dark, so the maps always use the dark basemap. */
-const BASEMAP_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-const basemapUrl = () => BASEMAP_URL;
-
-/* A Leaflet map with dragging on claims every touch that lands on it --
-   leaflet.css sets `touch-action: none` on it -- so on a phone the page cannot
-   be scrolled past the map at all: the finger pans the map instead, and both
-   maps sit mid-page. One-finger dragging is therefore off wherever the pointer
-   is a finger; two fingers still pan and zoom, and a mouse is unaffected. */
+/* Cross-origin iframes (RainViewer, Windy) with dragging on claim every touch
+   that lands on them, so on a phone the page cannot be scrolled past them at
+   all: the finger pans the embed instead of the page. One-finger dragging is
+   therefore off wherever the pointer is a finger, until the visitor
+   deliberately taps once; two fingers still pan/zoom the embed, and a mouse
+   is unaffected. */
 const COARSE_POINTER =
   typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
 
-function addMapHint(container) {
-  if (!COARSE_POINTER) return;
-  const hint = document.createElement('p');
-  hint.className = 'map-hint';
-  hint.dataset.i18n = 'map.twoFinger'; // so it follows a language switch
-  hint.textContent = T('map.twoFinger');
-  container.insertAdjacentElement('afterend', hint);
+/* A cross-origin iframe cannot be reached into, so "let two fingers pass
+   through" has to work entirely from outside: keep the iframe non-interactive
+   until the visitor deliberately taps it once. Shared by the radar and
+   forecast-map embeds -- same trick, different iframe. */
+function armTapToInteract(iframe, hint, hintText) {
+  if (!COARSE_POINTER || !hint) return;
+  iframe.style.pointerEvents = 'none';
+  hint.hidden = false;
+  hint.textContent = hintText;
+  hint.addEventListener(
+    'click',
+    () => {
+      iframe.style.pointerEvents = 'auto';
+      hint.hidden = true;
+    },
+    { once: true }
+  );
 }
 
-function initMap(data) {
-  if (map) return;
+let radarEmbedInitialised = false;
+
+/* RainViewer's own embed refreshes itself inside its iframe, so this only
+   ever runs once per page load -- there is no polling to keep going the way
+   the self-rendered overlay needed. */
+function initRadarEmbed(data) {
+  if (radarEmbedInitialised) return;
+  radarEmbedInitialised = true;
+
+  const iframe = $('radar-embed');
+  if (!iframe) return;
 
   const { latitude, longitude } = data.location;
-  map = L.map('map', { scrollWheelZoom: false, dragging: !COARSE_POINTER }).setView(
-    [latitude, longitude],
-    8
-  );
-  addMapHint($('map'));
+  const zoom = 8;
+  iframe.src = `https://www.rainviewer.com/map.html?loc=${latitude},${longitude},${zoom}&layer=radar&sm=1&sn=1`;
 
-  // A map fills in piece by piece and can sit half-drawn for seconds, which
-  // reads as broken rather than busy. Count the tiles instead.
-  radarMeter = EFW_LOADING.meter($('map'));
-
-  baseLayer = L.tileLayer(basemapUrl(), {
-    maxZoom: 19,
-    subdomains: 'abcd',
-    attribution: '© OpenStreetMap, © CARTO',
-  }).addTo(map);
-  radarMeter?.follow(baseLayer);
-
-  L.circleMarker([latitude, longitude], {
-    radius: 6,
-    color: '#f13ca3',
-    weight: 2,
-    fillColor: '#fff',
-    fillOpacity: 1,
-  })
-    .addTo(map)
-    .bindPopup(data.location.name);
+  text($('radar-status'), T('radar.embedNotice'));
+  armTapToInteract(iframe, $('radar-tap-hint'), T('radar.tapToInteract'));
 }
 
-/* One cache-buster per radar cycle, shared by everyone, rather than one per tab
-   per refresh: Date.now() made every visitor's request a unique URL, so no
-   browser or proxy between here and the server could serve any of them twice.
-   The composite only changes every refresh_seconds anyway. */
-function radarStamp() {
-  const seconds = (latest && latest.radar && latest.radar.refresh_seconds) || 240;
-  return Math.floor(Date.now() / (seconds * 1000));
-}
+let windyEmbedInitialised = false;
 
-/* POLRAD SRI is one composite image, not a tile set: unlike the old DWD radar
-   WMS, /api/radar.png hands back a single PNG for a bbox, so the map holds one
-   image overlay pinned to that rectangle instead of a tile layer. IMGW has no
-   public warning-area layer to match DWD's, so there is nothing to overlay for
-   warnings here -- see /api/v1/warnings for those instead. */
-function refreshRadar() {
-  // Offline no fresh frame can arrive at all, and stamping the current time on
-  // a map that never reloaded is the one lie this line could tell.
-  if (offlineCopyAt) {
-    text($('radar-status'), T('radar.offline'));
-    return;
-  }
+/* Windy's official embed (https://embed.windy.com/) -- a visualization layer
+   only, not a data source this app treats as authoritative. Numerical point
+   forecasts keep coming from IMGW COSMO / Open-Meteo via /api/summary; this
+   iframe never feeds a number back into the page. Like the radar card it
+   manages its own refresh and layer/model controls inside the iframe, so this
+   runs once per page load rather than polling. */
+function initWindyEmbed(data) {
+  if (windyEmbedInitialised) return;
+  windyEmbedInitialised = true;
 
-  const radar = latest?.radar;
-  if (!radar || !radar.available) {
-    if (radarLayer) {
-      map?.removeLayer(radarLayer);
-      radarLayer = null;
-      radarBounds = null;
-    }
-    text($('radar-status'), T('radar.offline'));
-    return;
-  }
+  const iframe = $('windy-embed');
+  if (!iframe) return;
 
-  const box = radar.bbox;
-  const bounds = [
-    [box.min_lat, box.min_lon],
-    [box.max_lat, box.max_lon],
-  ];
-  const url = `${radar.image_url}?_t=${radarStamp()}`;
-
-  if (radarLayer) {
-    if (String(bounds) !== String(radarBounds)) radarLayer.setBounds(bounds);
-    radarLayer.setUrl(url);
-  } else if (map) {
-    radarLayer = L.imageOverlay(url, bounds, {
-      opacity: 0.75,
-      interactive: false,
-      attribution: 'Radar © IMGW-PIB',
-    }).addTo(map);
-  }
-  radarBounds = bounds;
-
-  text($('radar-status'), `${T('radar.updated')} ${EFW_I18N.time(new Date())}`);
-}
-
-/* ------------------------------------------------------------ model card */
-
-/* The COSMO 2.8km fields. Poland has no gridded pollen product to match DWD's
-   ICON-ART, so unlike the old site this card has no pollen tab. */
-const MODEL_PARAMS = ['clouds', 'temperature', 'wind'];
-/* How long a frame stays up once it has actually arrived. Each step is a
-   separate GRIB file the server may still be fetching, so the timer starts on
-   the image's load event rather than blindly -- otherwise the first run through
-   would race ahead of the pictures and show nothing but the last frame. */
-const MODEL_FRAME_MS = 750;
-/* If an image neither loads nor errors -- a request lost somewhere upstream --
-   the animation must not simply stop dead with the button still on "pause". */
-const MODEL_FRAME_TIMEOUT_MS = 12000;
-
-let modelInfo = null;
-let modelParam = 'clouds';
-let modelStep = 0;
-let modelMap = null;
-let modelOverlay = null;
-let modelMeter = null;
-let modelPlaying = false;
-let modelTimer = null;
-let modelFailedStep = null; // retried once, not in a loop
-let modelBounds = null; // which rectangle the overlay is currently hung on
-
-const modelParams = () => MODEL_PARAMS;
-
-/** What the current tab is drawn from. */
-function modelMeta() {
-  return modelInfo?.parameters?.[modelParam] ?? null;
-}
-
-const modelMaxStep = () => modelInfo?.max_step ?? 24;
-const modelStepHours = () => 1;
-const modelRun = () => modelInfo?.run || null;
-const modelViewBox = () => modelInfo?.bbox ?? null;
-
-function modelImageUrl(step) {
-  return `/api/model.png?param=${modelParam}&step=${step}&width=720`;
-}
-
-/**
- * The play button and the row of forecast hours.
- *
- * Built here if the markup does not carry them, for the same reason
- * ensureDetail exists: a browser holding a cached copy of the page from before
- * these controls existed would otherwise take the whole model card down with
- * it -- reaching for an id that is not there threw, and the map never
- * initialised at all. The cache headers make that window small; they do not
- * close it, and one stale page should cost one feature, not the card.
- */
-function ensureModelControls() {
-  if ($('model-hours') && $('model-play')) return true;
-
-  console.warn('EFW: model controls missing from the markup, building them (stale cached HTML?)');
-  const legend = $('model-legend');
-  const card = legend?.closest('.card');
-  if (!card) return false;
-
-  // Whatever the old markup used to drive the forecast hour goes: two of them
-  // would fight over the same step.
-  card.querySelector('.model-step')?.remove();
-
-  const row = document.createElement('div');
-  row.className = 'model-step';
-  row.innerHTML =
-    '<button type="button" class="play" id="model-play" aria-pressed="false"></button>' +
-    '<div class="hours" id="model-hours" role="group"></div>';
-  legend.insertAdjacentElement('beforebegin', row);
-  return true;
-}
-
-/** A field of colour means nothing without coastlines under it. */
-function ensureModelMap() {
-  if (modelMap || !modelInfo) return;
-
-  // Leaflet cannot fit bounds inside a zero-size container: while <main> is
-  // still hidden the map would silently settle on a whole-world view.
-  const container = $('model-map');
-  if (!container || !container.offsetWidth) return;
-
-  const b = modelInfo.bbox;
-  modelMap = L.map(container, {
-    scrollWheelZoom: false,
-    dragging: !COARSE_POINTER,
-    attributionControl: false,
-    // Integer zoom steps would round down past the exact fit and leave the
-    // field floating in the middle of the frame; fractional zoom fills it.
-    zoomSnap: 0,
+  const { latitude, longitude } = data.location;
+  const zoom = 8;
+  const params = new URLSearchParams({
+    lat: String(latitude),
+    lon: String(longitude),
+    detailLat: String(latitude),
+    detailLon: String(longitude),
+    zoom: String(zoom),
+    level: 'surface',
+    overlay: 'clouds', // most useful default for event planning / astronomy
+    product: 'ecmwf',
+    menu: '',
+    message: 'true',
+    marker: 'true',
+    calendar: 'now',
+    pressure: '',
+    type: 'map',
+    location: 'coordinates',
+    detail: '',
+    metricWind: 'm/s',
+    metricTemp: '°C',
+    radarRange: '-1',
   });
-  addMapHint(container);
-  modelMeter = EFW_LOADING.meter(container);
-  const tiles = L.tileLayer(basemapUrl(), { maxZoom: 19, subdomains: 'abcd' }).addTo(modelMap);
-  modelMeter?.follow(tiles);
-  modelMap.fitBounds(
-    [
-      [b.min_lat, b.min_lon],
-      [b.max_lat, b.max_lon],
-    ],
-    { padding: [0, 0] }
-  );
-}
-
-async function initModel() {
-  if (modelInfo) return; // already set up on an earlier refresh
-  try {
-    const response = await EFW_LOADING.track(fetch('/api/model', { cache: 'no-store' }));
-    if (!response.ok) throw new Error(`server ${response.status}`);
-    modelInfo = await response.json();
-  } catch (error) {
-    console.error('EFW: model info unavailable', error);
-    text($('model-status'), T('model.unavailable'));
-    return;
-  }
-
-  try {
-    setUpModel();
-  } catch (error) {
-    // One broken card, never a broken page: the index, the day charts and the
-    // radar have nothing to do with this and must still come up.
-    console.error('EFW: model card failed to start', error);
-    modelInfo = null;
-    text($('model-status'), T('model.unavailable'));
-  }
-}
-
-function buildModelTabs() {
-  const tabs = $('model-tabs');
-  if (!tabs) return;
-  tabs.innerHTML = '';
-  for (const key of modelParams()) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.dataset.param = key;
-    button.textContent = T(`model.${key}`);
-    button.setAttribute('role', 'tab');
-    // Set here as well as in updateModel: the tabs are rebuilt on a language
-    // switch, and the new buttons would otherwise come up with none marked.
-    button.classList.toggle('active', key === modelParam);
-    button.addEventListener('click', () => {
-      stopModelPlay();
-      modelParam = key;
-      // Hours and days are different lengths of list; a step from one can sit
-      // off the end of the other.
-      modelStep = Math.min(modelStep, modelMaxStep());
-      buildModelHours();
-      updateModel();
-    });
-    tabs.append(button);
-  }
-}
-
-function setUpModel() {
-  // Pinnable like the language and unit switches, so a link can open on the
-  // field it is talking about.
-  const asked = new URLSearchParams(location.search).get('model');
-  if (modelParams().includes(asked)) modelParam = asked;
-
-  buildModelTabs();
-
-  if (ensureModelControls()) {
-    buildModelHours();
-    $('model-play').addEventListener('click', toggleModelPlay);
-    // Nobody is watching a hidden tab, and every frame is a GRIB file the
-    // server may have to fetch. Stop rather than animate into the void.
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) stopModelPlay();
-    });
-    syncModelPlay();
-  }
-  updateModel();
-}
-
-const stepLabel = (step) => (step === 0 ? T('model.now') : `+${step}`);
-
-const stepTitle = (step) => T('model.hoursAhead', { n: step });
-
-/** One button per forecast step: "now" and then +1, +2, +3 … */
-function buildModelHours() {
-  const host = $('model-hours');
-  if (!host) return;
-  host.innerHTML = '';
-  host.setAttribute('aria-label', T('model.step'));
-  for (let step = 0; step <= modelMaxStep(); step++) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.dataset.step = String(step);
-    button.textContent = stepLabel(step);
-    button.title = stepTitle(step);
-    button.addEventListener('click', () => {
-      stopModelPlay(); // picking a step by hand means you want to stay on it
-      modelStep = step;
-      updateModel();
-    });
-    host.append(button);
-  }
-}
-
-/** Mark the selected step. Every one is on screen, so nothing has to scroll. */
-function syncModelHours() {
-  const host = $('model-hours');
-  if (!host) return;
-  // The list is rebuilt when the tab changes, so a stale one here means the
-  // steps belong to the other kind of tab and the labels would lie.
-  if (host.children.length !== modelMaxStep() + 1) buildModelHours();
-  for (const button of host.children) {
-    const step = Number(button.dataset.step);
-    const on = step === modelStep;
-    // Relabelled here rather than only at build time, so a language switch
-    // reaches "now" without tearing the grid down and rebuilding it.
-    button.textContent = stepLabel(step);
-    button.title = stepTitle(step);
-    button.classList.toggle('active', on);
-    button.setAttribute('aria-pressed', String(on));
-  }
-}
-
-function toggleModelPlay() {
-  if (modelPlaying) stopModelPlay();
-  else startModelPlay();
-}
-
-function startModelPlay() {
-  if (!modelInfo) return;
-  modelPlaying = true;
-  syncModelPlay();
-  advanceModel();
-}
-
-function stopModelPlay() {
-  modelPlaying = false;
-  clearTimeout(modelTimer);
-  modelTimer = null;
-  syncModelPlay();
-}
-
-function advanceModel() {
-  modelStep = modelStep >= modelMaxStep() ? 0 : modelStep + 1; // loops
-  updateModel();
-}
-
-/** Called when a frame has arrived (or given up): queue the next one. */
-function scheduleModelFrame() {
-  if (!modelPlaying) return;
-  clearTimeout(modelTimer);
-  modelTimer = setTimeout(advanceModel, MODEL_FRAME_MS);
-}
-
-function onModelFrame() {
-  modelMeter?.settle();
-  modelFailedStep = null;
-  scheduleModelFrame();
-}
-
-function onModelFrameFailed() {
-  modelMeter?.settle();
-  console.warn('EFW: model image failed for +%dh', modelStep);
-
-  if (modelPlaying) {
-    scheduleModelFrame(); // the animation moves on; one gap is not a failure
-    return;
-  }
-
-  // Standing still on a broken frame used to look like nothing was happening
-  // at all. Say so, and give it one more go -- these are usually a transient
-  // upstream hiccup.
-  text($('model-status'), T('model.unavailable'));
-  if (modelFailedStep === modelStep) return;
-  modelFailedStep = modelStep;
-  setTimeout(() => {
-    if (!modelPlaying && modelFailedStep === modelStep) updateModel();
-  }, 4000);
-}
-
-function syncModelPlay() {
-  const button = $('model-play');
-  if (!button) return;
-  button.textContent = modelPlaying ? '⏸' : '▶';
-  button.classList.toggle('is-playing', modelPlaying);
-  button.setAttribute('aria-pressed', String(modelPlaying));
-  button.setAttribute('aria-label', T(modelPlaying ? 'model.pause' : 'model.play'));
-  button.title = T(modelPlaying ? 'model.pause' : 'model.play');
-}
-
-function updateModel() {
-  if (!modelInfo) return;
-
-  const step = modelStep;
-  syncModelHours();
-
-  for (const button of $('model-tabs').children) {
-    button.classList.toggle('active', button.dataset.param === modelParam);
-  }
-
-  ensureModelMap();
-
-  const url = modelImageUrl(step);
-  const box = modelViewBox();
-  const bounds = box && [
-    [box.min_lat, box.min_lon],
-    [box.max_lat, box.max_lon],
-  ];
-
-  if (modelOverlay) {
-    modelMeter?.expect();
-    if (bounds && String(bounds) !== String(modelBounds)) modelOverlay.setBounds(bounds);
-    modelOverlay.setUrl(url);
-  } else if (modelMap && bounds) {
-    modelMeter?.expect();
-    modelOverlay = L.imageOverlay(url, bounds, {
-      opacity: 0.75,
-      interactive: false,
-    }).addTo(modelMap);
-    modelOverlay.on('load', onModelFrame);
-    // A step the model has not published yet answers with an error. Say so,
-    // and when playing skip on to the next one rather than stalling there.
-    modelOverlay.on('error', onModelFrameFailed);
-  }
-  modelBounds = bounds;
-
-  // Belt and braces: neither event is guaranteed to fire for every URL.
-  if (modelPlaying) {
-    clearTimeout(modelTimer);
-    modelTimer = setTimeout(advanceModel, MODEL_FRAME_TIMEOUT_MS);
-  }
-
-  const run = modelRun() ? EFW_I18N.dayStart(modelRun()) : null;
-  const valid = run
-    ? new Date(run.getTime() + step * modelStepHours() * 3600 * 1000)
-    : null;
-  text(
-    $('model-status'),
-    [
-      run ? `${T('model.run')} ${EFW_I18N.dateTime(run, { day: 'numeric', month: 'short' })}` : '',
-      valid ? `→ ${EFW_I18N.dateTime(valid, { weekday: 'short' })}` : '',
-    ]
-      .filter(Boolean)
-      .join(' ')
-  );
-
-  // The key describes the field, not the step: rebuilding it on every frame of
-  // the animation would be churn for nothing.
-  if (legendParam !== modelParam) renderModelLegend();
-}
-
-let legendParam = null; // which field the key on screen describes
-
-function renderModelLegend() {
-  const host = $('model-legend');
-  const meta = modelMeta();
-  // Nothing to describe yet -- this runs once on the first payload, before
-  // /api/model has answered. Leave the key alone rather than blanking it, and
-  // leave legendParam unset so updateModel still builds it when the data lands.
-  if (!host || !meta) return;
-
-  legendParam = modelParam;
-  host.innerHTML = '';
-
-  host.append(scaleRow(T(`model.${modelParam}`), meta, modelParam === 'temperature'));
-
-  // Clouds carry rain on top, so that overlay needs its own scale.
-  if (meta.overlay) {
-    host.append(scaleRow(T('model.rain'), meta.overlay, false));
-  }
-
-  if (meta.arrows) {
-    const note = document.createElement('div');
-    note.className = 'note';
-    note.innerHTML = `<span class="arrow">→</span> ${T('model.windNote')}`;
-    host.append(note);
-  }
-}
-
-/** How many values fit along a scale before they start colliding. */
-function labelStride(count, width) {
-  const perLabel = 30; // room for a number like "-10" and a gap
-  return Math.max(1, Math.ceil(perLabel / Math.max(1, width / count)));
-}
-
-/**
- * One scale under the map.
- *
- * The field is drawn in steps, so the key is drawn in the same steps: a block
- * per band, and the numbers on the boundaries between them. A single smooth
- * ramp could only ever be honest about its two ends, which is what made the old
- * one unreadable -- there was no way to tell 12 °C from 18 °C on it.
- */
-function scaleRow(name, meta, isTemperature) {
-  const row = document.createElement('div');
-  row.className = 'row';
-
-  // The unit is named once, beside the field, rather than on every number
-  // along the scale -- repeated, they were wide enough to collide at the end.
-  const unit = isTemperature ? `°${EFW_I18N.getUnit()}` : meta.unit;
-  const label = document.createElement('span');
-  label.className = 'name';
-  label.textContent = `${name} (${unit})`;
-
-  const bar = document.createElement('div');
-  bar.className = 'bar';
-
-  const number = (v) => (isTemperature ? EFW_I18N.tempShort(v).replace('°', '') : String(v));
-  const full = (v) => (isTemperature ? EFW_I18N.temp(v, 0) : `${v} ${meta.unit}`);
-
-  if (meta.bands?.length) {
-    const swatches = document.createElement('div');
-    swatches.className = 'swatches';
-    for (const band of meta.bands) {
-      const cell = document.createElement('span');
-      cell.style.background = band.color;
-      // A band with no upper edge reads as "at or above", rather than
-      // borrowing a ceiling the data does not have.
-      const range =
-        band.to === null || band.to === undefined
-          ? `≥ ${full(band.from)}`
-          : `${full(band.from)}–${full(band.to)}`;
-      cell.title = band.label ? `${band.label} — ${range}` : range;
-      swatches.append(cell);
-    }
-    bar.append(
-      swatches,
-      meta.bands[0].label ? cellMarks(meta.bands) : edgeMarks(meta.bands, number)
-    );
-  } else {
-    // Rain is the exception: its ramp is square-rooted, so it stays a gradient
-    // with the ticks sitting where those rates actually fall on it.
-    const stops = meta.ramp.map(([at, color]) => `${color} ${(at * 100).toFixed(0)}%`);
-    const scale = document.createElement('span');
-    scale.className = 'scale';
-    scale.style.background = `linear-gradient(to right, ${stops.join(', ')})`;
-    bar.append(scale, tickMarks(meta.ticks || []));
-  }
-
-  row.append(label, bar);
-  return row;
-}
-
-/** A name centred under each block -- "1/8" … "8/8" for the cloud eighths. */
-function cellMarks(bands) {
-  const marks = document.createElement('div');
-  marks.className = 'marks cells';
-  for (const band of bands) {
-    const mark = document.createElement('span');
-    mark.textContent = band.label;
-    marks.append(mark);
-  }
-  return marks;
-}
-
-/** Numbers on the boundaries between blocks, thinned until they fit. */
-function edgeMarks(bands, value) {
-  const marks = document.createElement('div');
-  marks.className = 'marks';
-
-  const edges = [...bands.map((band) => band.from), bands[bands.length - 1].to];
-  const last = edges.length - 1;
-  // Measured against the card: the bar itself has no width until it is in the
-  // document, and this only has to decide how many numbers to draw.
-  const room = Math.max(140, ($('model-legend')?.clientWidth || 420) - 122); // less the name
-  const stride = labelStride(bands.length, room);
-
-  const wanted = new Set();
-  for (let index = 0; index <= last; index += stride) wanted.add(index);
-  // The end of the scale always gets its number, and whatever falls less than
-  // a full stride short of it gives way -- otherwise the two run together.
-  const previous = last - (last % stride || stride);
-  if (last - previous < stride) wanted.delete(previous);
-  wanted.add(last);
-
-  for (const index of [...wanted].sort((a, b) => a - b)) {
-    const mark = document.createElement('span');
-    mark.className = index === 0 ? 'first' : index === last ? 'last' : '';
-    mark.style.left = `${(index / last) * 100}%`;
-    mark.textContent = value(edges[index]);
-    marks.append(mark);
-  }
-  return marks;
-}
-
-/** Ticks at their own positions along a gradient. */
-function tickMarks(ticks) {
-  const marks = document.createElement('div');
-  marks.className = 'marks';
-  ticks.forEach((tick, index) => {
-    const mark = document.createElement('span');
-    mark.className = index === 0 ? 'first' : index === ticks.length - 1 ? 'last' : '';
-    mark.style.left = `${tick.at * 100}%`;
-    mark.textContent = String(tick.value);
-    marks.append(mark);
+  iframe.src = `https://embed.windy.com/embed2.html?${params}`;
+  // A network-level failure (DNS, connection refused) fires 'error' even on a
+  // cross-origin iframe; an HTTP-level one inside Windy's own page will not,
+  // but that is Windy's page to report, not this one's -- the rest of the
+  // site never depends on this card either way.
+  iframe.addEventListener('error', () => text($('windy-status'), T('map.unavailable')), {
+    once: true,
   });
-  return marks;
+
+  text($('windy-status'), T('map.embedNotice'));
+  armTapToInteract(iframe, $('windy-tap-hint'), T('map.tapToInteract'));
 }
 
 /* ------------------------------------------------- site load & the notices */
@@ -1433,13 +925,6 @@ function render(data) {
   renderLegend($('legend-days'));
   renderNow(data.current, data.fsi, data.location);
   renderDays(data.daily);
-  renderModelLegend();
-  if (modelInfo) {
-    // All of these carry generated text, so they follow the language.
-    buildModelTabs();
-    syncModelHours();
-    syncModelPlay();
-  }
   applySelection(); // a panel left open survives the five-minute refresh
 
   // The short name, not the full one: "EF30" is what the header has room for,
@@ -1514,9 +999,8 @@ async function load() {
     if (skeleton) skeleton.hidden = true; // the real thing has arrived
     render(data);
 
-    initMap(data);
-    refreshRadar();
-    initModel(); // only now that the card has a measurable size
+    initRadarEmbed(data);
+    initWindyEmbed(data);
   } catch (error) {
     console.error('EFW load failed', error);
     const box = $('error');

@@ -19,9 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from app import api_v1, net, presence, ratelimit, schemas, service
 from app.config import settings
 from app.providers.http import cache, field_cache
-from app.providers.imgw import cosmo as imgw_cosmo
 from app.providers.imgw import observations as synop
-from app.providers.imgw.client import ProductNotFound
 from app.providers.imgw import radar as imgw_radar
 from app.providers.imgw import warnings as imgw_warnings
 from app.providers.open_meteo import forecast as open_meteo_forecast
@@ -41,9 +39,7 @@ app = FastAPI(
         "Fursuiting index, weather overview and warnings for "
         f"{settings.location.name}, built on IMGW-PIB and Open-Meteo data.\n\n"
         "**Everything published here is JSON under `/api/v1`, and those shapes are "
-        "a stable contract.** The map imagery this site draws for itself is not part "
-        "of it: pictures are expensive to serve and trivial to abuse, so they are "
-        "not offered as an API.\n\n"
+        "a stable contract.**\n\n"
         "Open access, no key. Please respect the rate limit in the `X-RateLimit-*` "
         "headers and cache responses — the upstream data only changes hourly.\n\n"
         "Źródłem pochodzenia danych jest Instytut Meteorologii i Gospodarki Wodnej "
@@ -93,17 +89,13 @@ app.add_middleware(
         "Retry-After",
         "X-Site-Load",
         "X-Site-Visitors",
-        "X-Model-Run",
-        "X-Valid-Time",
-        "X-Value-Min",
-        "X-Value-Max",
     ],
 )
 
 
 @app.get("/api/summary", include_in_schema=False)
 def get_summary(
-    lang: str = Query("en", pattern="^(en|de)$", description="Language for generated text"),
+    lang: str = Query("en", pattern="^(en|de|pl)$", description="Language for generated text"),
 ) -> JSONResponse:
     """This project's own aggregate. Deliberately absent from the schema.
 
@@ -120,111 +112,11 @@ def get_summary(
 
 # ----------------------------------------------------------------- imagery
 #
-# The endpoints below draw pictures, and pictures are not an API. Every
-# one of them costs an upstream fetch and a render, and answers in kilobytes
-# where the JSON answers in bytes -- which makes a published image endpoint an
-# amplifier: a few cheap requests turn into a lot of expensive work on one
-# machine on a home uplink. So none of them is in the schema or the docs. They
-# exist for this site's own map card, at the one size that card asks for.
-#
-# Unlike DWD, IMGW has no public WMS a browser can be pointed at directly, so
-# this app renders the POLRAD SRI composite itself and serves the PNG below.
-#
-# COSMO 2.8km model-field maps (the old ICON-D2 clouds/temperature/wind card)
-# are decoded by app/providers/imgw/cosmo.py -- a real GRIB1 reader, not a
-# guess at the format; see that module's docstring for how its record table
-# and grid geometry were confirmed against a live file. A gridded pollen layer
-# is not implemented: Open-Meteo's pollen endpoint has no raster/gridded
-# product at all, only point values, and there is no Polish equivalent of
-# DWD's ICON-ART pollen maps to draw -- that endpoint stays a 404 rather than
-# silently falling back to DWD's.
-
-#: The model card's map is far wider than it is tall, so the field is cut to a
-#: matching shape -- otherwise it fits the height and leaves empty side margins.
-MODEL_ASPECT = 2.3
-
-#: Widest render anyone may ask for. The card requests 720, and every pixel
-#: above that is work nobody asked for: area, and so cost, grows with the
-#: square. A ceiling near what is actually used takes the amplification out.
-MAX_IMAGE_WIDTH = 900
-
-
-def _model_bbox(span: float, aspect: float = 1.0) -> tuple:
-    return imgw_radar.bbox_around(
-        settings.location.latitude, settings.location.longitude, span, aspect=aspect
-    )
-
-
-@app.get("/api/radar.png", include_in_schema=False)
-def get_radar_image(
-    span: float = Query(1.6, ge=0.2, le=4.0),
-    width: int = Query(720, ge=100, le=MAX_IMAGE_WIDTH),
-) -> Response:
-    """The POLRAD SRI precipitation-rate composite as a map overlay."""
-    bbox = _model_bbox(span)
-    height = int(round(width * (bbox[2] - bbox[0]) / (bbox[3] - bbox[1])))
-    try:
-        result = imgw_radar.render(bbox, width, height)
-    except Exception as exc:  # noqa: BLE001
-        logger.error("POLRAD SRI render failed: %s", exc)
-        raise HTTPException(status_code=502, detail="Radar data unavailable") from exc
-
-    if result is None:
-        # Frame missing or stale -- an answer, not a fault. See
-        # app/providers/imgw/radar.py: this must never draw a fabricated frame.
-        raise HTTPException(status_code=404, detail="No fresh POLRAD SRI frame available")
-
-    return Response(
-        content=result["png"],
-        media_type="image/png",
-        headers={
-            "Cache-Control": "public, max-age=240",
-            "X-Valid-Time": result["valid"].isoformat(),
-            "X-Value-Min": "" if result["min"] is None else f"{result['min']:.1f}",
-            "X-Value-Max": "" if result["max"] is None else f"{result['max']:.1f}",
-        },
-    )
-
-
-@app.get("/api/model", include_in_schema=False)
-def get_model_info(span: float = Query(2.0, ge=0.5, le=4.0)) -> JSONResponse:
-    """Model-field metadata for the map card: fields, ranges, run time, bbox."""
-    bbox = _model_bbox(span, aspect=MODEL_ASPECT)
-    return JSONResponse(imgw_cosmo.describe_parameters(bbox))
-
-
-@app.get("/api/model.png", include_in_schema=False)
-def get_model_image(
-    param: str = Query(...),
-    step: int = Query(0, ge=0, le=imgw_cosmo.MAX_STEP),
-    span: float = Query(2.0, ge=0.5, le=4.0),
-    width: int = Query(720, ge=100, le=MAX_IMAGE_WIDTH),
-) -> Response:
-    """One COSMO field as a map overlay, at a given forecast step."""
-    if param not in imgw_cosmo.PARAMETERS:
-        raise HTTPException(status_code=422, detail=f"Unknown model parameter {param!r}")
-
-    bbox = _model_bbox(span, aspect=MODEL_ASPECT)
-    try:
-        result = imgw_cosmo.render(param, step, bbox, width)
-    except ProductNotFound as exc:
-        # The step this run hasn't published yet -- an answer, not a fault.
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
-        logger.error("COSMO render failed (param=%s step=%s): %s", param, step, exc)
-        raise HTTPException(status_code=502, detail="Model data unavailable") from exc
-
-    return Response(
-        content=result["png"],
-        media_type="image/png",
-        headers={
-            "Cache-Control": "public, max-age=900",
-            "X-Model-Run": result["run"].isoformat(),
-            "X-Valid-Time": result["valid"].isoformat(),
-            "X-Value-Min": "" if result["min"] is None else f"{result['min']:.1f}",
-            "X-Value-Max": "" if result["max"] is None else f"{result['max']:.1f}",
-        },
-    )
+# The interactive forecast map is an embedded Windy iframe (see static/app.js,
+# static/index.html) rather than anything this backend renders -- Windy is
+# a visualization service, not a data source this app treats as authoritative.
+# The one image endpoint left is the pollen stub below, kept 404 rather than
+# removed since nothing else here needs raster generation any more.
 
 
 @app.get("/api/pollen.png", include_in_schema=False)
@@ -286,8 +178,10 @@ REVALIDATE = "no-cache, must-revalidate"
 class RevalidatingStatic(StaticFiles):
     """StaticFiles that pins app assets to revalidate but lets vendor code cache.
 
-    ``vendor/`` holds version-pinned third-party files (Leaflet) that never
-    change under a given name, so they are safe to cache for a long time.
+    ``vendor/`` is where version-pinned third-party files would live -- safe to
+    cache hard under a given name, unlike app.js/index.html above. Empty for
+    now (the last occupant, Leaflet, went with the model-map card), kept for
+    whatever needs it next.
     """
 
     def file_response(self, *args, **kwargs):  # type: ignore[override]

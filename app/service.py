@@ -492,7 +492,6 @@ def build_summary(lang: str = "en") -> Dict[str, Any]:
         # mistaken for one another. `warn` marks the ones heavy enough to say
         # out loud -- see pollen.WARN_FROM_LEVEL.
         "pollen": pollen_here,
-        "radar": poland.radar_info(),
         "forecast_issued": forecast.get("issued").isoformat()
         if forecast.get("issued")
         else None,

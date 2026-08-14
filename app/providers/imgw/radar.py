@@ -1,9 +1,9 @@
-"""POLRAD SRI (precipitation rate) -- venue sampling and the map overlay PNG.
+"""POLRAD SRI (precipitation rate) -- venue sampling for the FSI "current rain" figure.
 
-IMGW has no public WMS the way DWD does, so unlike the old ``app/dwd/radar.py``
-(which only computed a bbox for the browser to hand straight to DWD's
-GeoServer) this module does real work: download the HDF5 composite, decode it,
-and either sample one point or render a crop as a PNG this app serves itself.
+The map card itself embeds RainViewer directly rather than rendering an
+overlay from this data (see ``.ai/radar-embed-plan.md``); this module now
+exists only to download the HDF5 composite, decode it, and sample the
+precipitation rate at one point.
 
 Format, confirmed by inspecting a live file
 (``COMPO_SRI.comp.sri`` -> the newest ``*.sri.h5``, 22 KB, ODIM_H5/V2_3)::
@@ -35,11 +35,10 @@ import io
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import h5py
 import numpy as np
-from PIL import Image
 from pyproj import Transformer
 
 from app.config import settings
@@ -105,34 +104,6 @@ class RadarField:
         if raw == self.undetect:
             return 0.0
         return raw * self.gain + self.offset
-
-    def grid_lonlat(self, width: int, height: int, bbox: Tuple[float, float, float, float]):
-        """lon/lat meshgrid for an output image of ``width`` x ``height`` over ``bbox``."""
-        min_lat, min_lon, max_lat, max_lon = bbox
-        lons = np.linspace(min_lon, max_lon, width)
-        lats = np.linspace(max_lat, min_lat, height)  # top row = north
-        return np.meshgrid(lons, lats)
-
-    def sample_grid(self, width: int, height: int, bbox: Tuple[float, float, float, float]) -> np.ndarray:
-        """Physical values resampled (nearest) onto an output lat/lon grid. NaN = no data."""
-        lon_grid, lat_grid = self.grid_lonlat(width, height, bbox)
-        to_proj = self._to_proj()
-        x, y = to_proj.transform(lon_grid, lat_grid)
-        x_ul, y_ul = to_proj.transform(self.ul_lon, self.ul_lat)
-        col = np.round((x - x_ul) / self.xscale).astype(np.int64)
-        row = np.round((y_ul - y) / self.yscale).astype(np.int64)
-
-        in_bounds = (row >= 0) & (row < self.ysize) & (col >= 0) & (col < self.xsize)
-        out = np.full((height, width), np.nan, dtype=np.float64)
-        safe_row = np.where(in_bounds, row, 0)
-        safe_col = np.where(in_bounds, col, 0)
-        raw = self.data[safe_row, safe_col]
-
-        physical = raw * self.gain + self.offset
-        physical = np.where(raw == self.undetect, 0.0, physical)
-        valid = in_bounds & (raw != self.nodata)
-        out[valid] = physical[valid]
-        return out
 
 
 def _decode(payload: bytes) -> RadarField:
@@ -221,80 +192,3 @@ def precipitation_intensity(lat: float, lon: float) -> Tuple[Optional[float], Op
     return field.value_at(lat, lon), field.valid_time
 
 
-def bbox_around(lat: float, lon: float, span_deg: float, aspect: float = 1.0) -> Tuple[float, float, float, float]:
-    lon_span = span_deg / 0.6 * aspect  # cos(latitude) approximation, same as the old DWD helper
-    return (
-        round(lat - span_deg, 4),
-        round(lon - lon_span, 4),
-        round(lat + span_deg, 4),
-        round(lon + lon_span, 4),
-    )
-
-
-def radar_info(span_deg: float = 1.6) -> Dict:
-    """What the frontend needs to put the radar overlay on its map."""
-    field = latest_field()
-    bbox = bbox_around(settings.location.latitude, settings.location.longitude, span_deg)
-    return {
-        "provider": "imgw-polrad",
-        "product": settings.imgw.radar_product,
-        "available": field is not None,
-        "valid_time": field.valid_time.isoformat() if field else None,
-        "bbox": {"min_lat": bbox[0], "min_lon": bbox[1], "max_lat": bbox[2], "max_lon": bbox[3]},
-        "image_url": "/api/radar.png",
-        "attribution": (
-            "Źródłem pochodzenia danych jest Instytut Meteorologii i Gospodarki Wodnej "
-            "– Państwowy Instytut Badawczy. Dane Instytutu Meteorologii i Gospodarki "
-            "Wodnej – Państwowego Instytutu Badawczego zostały przetworzone."
-        ),
-        "refresh_seconds": RADAR_TTL,
-    }
-
-
-#: mm/h lower bound -> RGBA. Values below the first band's bound render
-#: transparent, same as "no rain here" rather than a coloured zero.
-RAIN_RAMP = (
-    (0.1, (100, 181, 246, 110)),
-    (0.5, (33, 150, 243, 150)),
-    (2.0, (76, 175, 80, 170)),
-    (5.0, (255, 235, 59, 190)),
-    (10.0, (255, 152, 0, 210)),
-    (20.0, (244, 67, 54, 225)),
-    (50.0, (156, 39, 176, 240)),
-)
-
-
-def _colorise(values: np.ndarray) -> np.ndarray:
-    """mm/h grid (NaN = no data) -> RGBA uint8 image."""
-    height, width = values.shape
-    rgba = np.zeros((height, width, 4), dtype=np.uint8)
-    for lower, color in RAIN_RAMP:
-        mask = values >= lower
-        rgba[mask] = color
-    return rgba
-
-
-def render(bbox: Tuple[float, float, float, float], width: int, height: int) -> Optional[Dict]:
-    """A transparent PNG of the precipitation-rate composite over ``bbox``.
-
-    Returns None if the radar is unavailable or too stale -- callers should
-    treat that as "no overlay right now", never fall back to a fabricated
-    image.
-    """
-    field = latest_field()
-    if field is None:
-        return None
-
-    values = field.sample_grid(width, height, bbox)
-    rgba = _colorise(values)
-
-    buffer = io.BytesIO()
-    Image.fromarray(rgba, mode="RGBA").save(buffer, format="PNG")
-
-    finite = values[np.isfinite(values)]
-    return {
-        "png": buffer.getvalue(),
-        "valid": field.valid_time,
-        "min": float(finite.min()) if finite.size else None,
-        "max": float(finite.max()) if finite.size else None,
-    }

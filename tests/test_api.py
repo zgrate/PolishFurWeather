@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
@@ -14,27 +13,6 @@ from app.main import app
 from app.models import WeatherPoint, Warning
 from app.providers import poland
 from app.providers.http import cache, field_cache
-from app.providers.imgw import cosmo as imgw_cosmo
-from app.providers.imgw import radar as imgw_radar
-
-#: A fixed run so /api/model never reaches the network for its "latest run"
-#: probe -- describe_parameters() swallows a failure there into "unavailable"
-#: rather than raising, which would hide a live call behind a green suite.
-FIXED_RUN = datetime(2026, 8, 13, 0, tzinfo=timezone.utc)
-
-RADAR_INFO = {
-    "provider": "imgw-polrad",
-    "product": "COMPO_SRI.comp.sri",
-    "available": True,
-    "valid_time": "2026-08-13T12:00:00+00:00",
-    "bbox": {"min_lat": 52.0, "min_lon": 18.0, "max_lat": 54.0, "max_lon": 20.0},
-    "image_url": "/api/radar.png",
-    "attribution": (
-        "Źródłem pochodzenia danych jest Instytut Meteorologii i Gospodarki Wodnej "
-        "– Państwowy Instytut Badawczy."
-    ),
-    "refresh_seconds": 240,
-}
 
 
 @pytest.fixture(autouse=True)
@@ -52,8 +30,6 @@ def clear_cache(monkeypatch):
     # put the suite back on the network. Fixtures that want a reading set their
     # own on top of this.
     monkeypatch.setattr(poland, "pollen_at_point", lambda *a, **k: [])
-    monkeypatch.setattr(poland, "radar_info", lambda *a, **k: dict(RADAR_INFO))
-    monkeypatch.setattr(imgw_cosmo, "latest_run", lambda: FIXED_RUN)
     yield
     cache.clear()
     field_cache.clear()
@@ -175,7 +151,6 @@ def test_summary_has_every_section(client):
     }
     assert body["fsi_series"]
     assert body["daily"]
-    assert body["radar"]["provider"]
     assert body["degraded"] == []
 
 
@@ -228,28 +203,6 @@ def test_summary_fails_loudly_when_every_source_is_down(monkeypatch):
     assert TestClient(app).get("/api/summary").status_code == 503
 
 
-def test_radar_image_is_served_when_a_frame_is_available(client, monkeypatch):
-    monkeypatch.setattr(
-        imgw_radar,
-        "render",
-        lambda bbox, width, height: {
-            "png": b"\x89PNG\r\n\x1a\n" + b"0" * 16,
-            "valid": datetime.now(timezone.utc),
-            "min": 0.0,
-            "max": 3.5,
-        },
-    )
-    response = client.get("/api/radar.png")
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "image/png"
-
-
-def test_radar_image_404s_without_a_fresh_frame(client, monkeypatch):
-    """A missing/stale POLRAD frame is an answer, not a fabricated picture."""
-    monkeypatch.setattr(imgw_radar, "render", lambda bbox, width, height: None)
-    assert client.get("/api/radar.png").status_code == 404
-
-
 def test_summary_carries_the_pollen_reading(client):
     """The board raises its own warning from this, so it has to be in the payload."""
     reading = client.get("/api/summary").json()["pollen"][0]
@@ -271,15 +224,6 @@ def test_pollen_never_takes_the_page_down_with_it(monkeypatch, stub_sources):
     assert body["pollen"] == []
     assert body["current"] is not None
     assert body["daily"]
-
-
-def test_radar_block_names_the_provider(client):
-    """The map needs an image URL and the area, and nothing else."""
-    radar = client.get("/api/summary").json()["radar"]
-    assert radar["provider"]
-    assert radar["image_url"]
-    assert {"min_lat", "min_lon", "max_lat", "max_lon"} <= set(radar["bbox"])
-    assert "age_seconds" not in radar
 
 
 def test_best_window_is_reported(client):
@@ -418,12 +362,6 @@ def test_pages_and_scripts_must_revalidate(client):
     for path in ("/", "/display", "/app.js", "/display.js", "/chart.js", "/style.css"):
         cache_control = client.get(path).headers.get("cache-control", "")
         assert "no-cache" in cache_control, f"{path} -> {cache_control!r}"
-
-
-def test_vendor_assets_may_be_cached(client):
-    """Leaflet is version-pinned under a stable name, so it can be held."""
-    cache_control = client.get("/vendor/leaflet.js").headers.get("cache-control", "")
-    assert "max-age" in cache_control and "no-cache" not in cache_control
 
 
 def test_static_assets_still_revalidate_cheaply(client):
@@ -614,57 +552,16 @@ def test_german_bands_are_translated(client):
     assert "Ausgezeichnet" in labels
 
 
-def test_model_info_describes_every_layer(client):
-    body = client.get("/api/model").json()
-    assert set(body["parameters"]) == {"clouds", "temperature", "wind"}
-    # Clouds carry rain on top; wind carries arrows and no isolines any more.
-    assert body["parameters"]["clouds"]["overlay"]["unit"] == "mm/h"
-    assert body["parameters"]["wind"]["arrows"] is True
-    assert "contour_step" not in body["parameters"]["wind"]
+def test_polish_bands_are_translated(client):
+    labels = [b["label"] for b in client.get("/api/summary?lang=pl").json()["bands"]]
+    assert "Doskonałe" in labels
 
 
-def test_model_layers_publish_the_steps_they_are_drawn_in(client):
-    """The key is drawn from these, so a band the legend prints is a band the
-    renderer painted -- two hand-kept lists would drift."""
-    layers = client.get("/api/model").json()["parameters"]
-
-    for key, expected in (("clouds", 8), ("temperature", 21), ("wind", 12)):
-        bands = layers[key]["bands"]
-        assert len(bands) == expected
-        assert bands[0]["from"] == layers[key]["min"]
-        assert bands[-1]["to"] == layers[key]["max"]
-        # Contiguous, in order, and every one of them coloured.
-        for lower, upper in zip(bands, bands[1:]):
-            assert lower["to"] == upper["from"]
-        assert all(band["color"].startswith("rgba(") for band in bands)
-
-
-def test_cloud_bands_are_eighths_from_one_to_full():
-    """Sky cover is reported in oktas; 0/8 has no swatch because a clear sky is
-    drawn as nothing at all."""
-    bands = imgw_cosmo._bands("clouds")
-    assert [band["label"] for band in bands] == [f"{n}/8" for n in range(1, 9)]
-
-
-def test_cloud_field_rounds_up_to_the_next_okta():
-    """Any cloud at all is at least 1/8, and only a truly clear sky is 0."""
-    values = np.array([0.0, 0.1, 12.5, 12.6, 99.9, 100.0])
-    assert list(imgw_cosmo._oktas(values)) == [0, 1, 1, 2, 8, 8]
-
-
-def test_temperature_bands_are_two_degrees_on_even_numbers():
-    bands = imgw_cosmo._bands("temperature")
-    assert all(band["to"] - band["from"] == 2.0 for band in bands)
-    assert all(band["from"] % 2 == 0 for band in bands)
-
-
-def test_model_bbox_is_wider_than_tall(client):
-    """The model card's map is wide, so the field is cut to match or it would
-    sit in the frame with empty margins."""
-    box = client.get("/api/model").json()["bbox"]
-    lat_span = box["max_lat"] - box["min_lat"]
-    lon_span = (box["max_lon"] - box["min_lon"]) * 0.6  # degrees -> ground scale
-    assert lon_span / lat_span > 1.8
+def test_model_map_endpoints_are_gone(client):
+    """The interactive forecast map is now a Windy iframe (see static/app.js);
+    this backend renders no map imagery of its own any more."""
+    assert client.get("/api/model").status_code == 404
+    assert client.get("/api/model.png").status_code == 404
 
 
 def test_easter_egg_is_exposed_on_the_api(client):

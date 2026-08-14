@@ -96,6 +96,8 @@
 
 .no-color-mix .warn-track .range.hatched { background-color: rgba(229, 57, 53, 0.28); }
 .no-color-mix .warnings-summary .advance-tag { background-color: rgba(229, 57, 53, 0.3); }
+.no-color-mix .radar-tap-hint,
+.no-color-mix .windy-tap-hint { background: rgba(26, 32, 57, 0.55); }
 
 /* ---- ConOps board ---- */
 .no-color-mix .score-tile { border-color: rgba(0, 0, 0, 0.3); }
@@ -126,9 +128,7 @@
 .no-flex-gap .allergy-switch > * + * { margin-left: 0.3rem; }
 .no-flex-gap .radar-controls > * + * { margin-left: 1rem; }
 .no-flex-gap .radar-controls label > * + * { margin-left: 0.4rem; }
-.no-flex-gap .model-tabs > * + * { margin-left: 0.4rem; }
-.no-flex-gap .model-step > * + * { margin-left: 0.5rem; }
-.no-flex-gap .model-legend .row > * + * { margin-left: 0.6rem; }
+.no-flex-gap .windy-controls > * + * { margin-left: 1rem; }
 .no-flex-gap .hour-detail .head > * + * { margin-left: 0.7rem; }
 .no-flex-gap .weights-body > * + * { margin-left: 1.1rem; }
 .no-flex-gap .warnings-summary > summary > * + * { margin-left: 0.5rem; }
@@ -203,6 +203,8 @@
    --------------------------------------------------------------------------- */
 
 .no-inset .progress { top: 0; right: 0; left: 0; bottom: auto; }
+.no-inset .radar-tap-hint,
+.no-inset .windy-tap-hint { top: 0; right: 0; bottom: 0; left: 0; }
 
 /* ---------------------------------------------------------------------------
    clamp()

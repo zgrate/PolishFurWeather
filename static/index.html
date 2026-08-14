@@ -6,7 +6,6 @@
   <title>Eurofurence Weather: Main page</title>
   <meta name="description" content="Fursuiting index, weather overview and rain radar, built on IMGW-PIB and Open-Meteo data.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦊</text></svg>">
-  <link rel="stylesheet" href="/vendor/leaflet.css">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -35,6 +34,7 @@
     <div class="lang-switch" role="group" id="lang-switch" aria-label="Language">
       <button type="button" data-lang="en">EN</button>
       <button type="button" data-lang="de">DE</button>
+      <button type="button" data-lang="pl">PL</button>
     </div>
   </div>
   <p class="subtitle" id="subtitle">Loading…</p>
@@ -117,7 +117,10 @@
   <!-- Radar -->
   <section class="card" aria-labelledby="radar-heading">
     <h2 id="radar-heading" data-i18n="radar.heading">Rain radar</h2>
-    <div id="map" class="map"></div>
+    <div class="map radar-embed-wrap">
+      <iframe id="radar-embed" class="radar-embed" loading="lazy" allow="fullscreen" title="Rain radar"></iframe>
+      <div class="radar-tap-hint" id="radar-tap-hint" data-i18n="radar.tapToInteract" hidden></div>
+    </div>
     <p class="radar-controls">
       <span class="radar-status" id="radar-status"></span>
     </p>
@@ -129,21 +132,18 @@
     <video id="egg-video" src="/media/ravi_67.mp4" autoplay muted loop playsinline></video>
   </section>
 
-  <!-- COSMO model maps -->
-  <section class="card" aria-labelledby="model-heading">
-    <h2 id="model-heading" data-i18n="model.heading">Model maps (COSMO)</h2>
-    <div class="model-tabs" id="model-tabs" role="tablist"></div>
-    <div class="model-figure">
-      <div id="model-map" class="map"></div>
-      <p class="model-status" id="model-status"></p>
+  <!-- Interactive forecast map: an official Windy embed, not IMGW/COSMO data.
+       Numerical point forecasts stay IMGW COSMO/Open-Meteo (see the daily
+       forecast card above); this is a visualization layer only. -->
+  <section class="card" aria-labelledby="windy-heading">
+    <h2 id="windy-heading" data-i18n="map.heading">Interactive forecast map</h2>
+    <div class="map windy-embed-wrap">
+      <iframe id="windy-embed" class="windy-embed" loading="lazy" allow="fullscreen" title="Interactive forecast map"></iframe>
+      <div class="windy-tap-hint" id="windy-tap-hint" data-i18n="map.tapToInteract" hidden></div>
     </div>
-    <div class="model-step">
-      <button type="button" class="play" id="model-play" aria-pressed="false"></button>
-      <!-- One button per forecast hour, all of them on screen at once: a slider
-           gave no way to see, or land on, the hour you actually wanted. -->
-      <div class="hours" id="model-hours" role="group" aria-label="Forecast hour"></div>
-    </div>
-    <p class="model-legend" id="model-legend"></p>
+    <p class="windy-controls">
+      <span class="windy-status" id="windy-status"></span>
+    </p>
   </section>
 </main>
 
@@ -214,6 +214,7 @@
   <p>
     <span data-i18n="footer.builtBy">Built by</span> <strong>Laffie @laffiesphere</strong> ·
     <a href="https://github.com/laffiesphere/EurofurenceWeather" rel="noopener" data-i18n="footer.source">source</a>
+    · <span data-i18n="footer.polishVersion">Polish version by</span> <strong>Z-Grate @ Stowarzyszenie Foxcons</strong>
   </p>
   <!-- Filled in by the tip-jar block at the end of the body, on the author's own
        host only. Empty and invisible everywhere else. A div rather than a p: the
@@ -249,7 +250,6 @@
   })();
 </script>
 
-<script src="/vendor/leaflet.js"></script>
 <script src="/i18n.js"></script>
 <script src="/loading.js"></script>
 <script src="/chart.js"></script>

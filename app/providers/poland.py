@@ -111,7 +111,3 @@ def fetch_warnings(lang: str = "en") -> List[Warning]:
 
 def pollen_at_point(lat: Optional[float] = None, lon: Optional[float] = None) -> List[Dict[str, Any]]:
     return open_meteo_pollen.at_point(lat, lon)
-
-
-def radar_info(span_deg: float = 1.6) -> Dict[str, Any]:
-    return radar.radar_info(span_deg)

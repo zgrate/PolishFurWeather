@@ -36,7 +36,7 @@ CAMS pollen. It features a wide range of features:
   on a congested convention network and says how old the numbers are
 - **ConOps display** at `/display`: a full-screen board for the info desk
 - **Public API** at `/api/v1`: versioned, documented, open
-- **EN/DE** language support.
+- **EN/DE/PL** language support.
 - **Unit conversion** if you prefer Fahrenheit or a different clock type.
 
 ## ConOps display

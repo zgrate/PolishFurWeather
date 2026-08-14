@@ -84,24 +84,13 @@ window.EFW_I18N = (function () {
       'warnings.advance': 'ADVANCE NOTICE',
       'warnings.advanceNote': 'Advance notice: possible severe weather, not yet a warning in force.',
       'radar.heading': 'Rain radar',
-      'radar.updated': 'Radar updated',
-      'radar.offline': 'Unable to load fetch Radar at this moment.',
-      'map.twoFinger': 'Use two fingers to move the map.',
+      'radar.embedNotice': 'Radar: RainViewer',
+      'radar.tapToInteract': 'Tap to interact',
 
-      'model.heading': 'Model maps (COSMO)',
-      'model.clouds': 'Clouds',
-      'model.temperature': 'Temperature',
-      'model.wind': 'Wind',
-      'model.loading': 'Loading model layer…',
-      'model.unavailable': 'Model layer unavailable right now.',
-      'model.run': 'Model run',
-      'model.step': 'Forecast hour',
-      'model.now': 'now',
-      'model.hoursAhead': '{n} h after the model run',
-      'model.play': 'Play the forecast hours',
-      'model.pause': 'Pause',
-      'model.rain': 'Rain',
-      'model.windNote': 'Arrows point the way the wind blows.',
+      'map.heading': 'Interactive forecast map',
+      'map.embedNotice': 'Interactive forecast map: Windy',
+      'map.tapToInteract': 'Tap to interact',
+      'map.unavailable': 'Interactive forecast map is currently unavailable.',
 
       /* Species names and levels for the point pollen reading on the ConOps
          board (display.js) -- CAMS, via Open-Meteo. No hazel key: CAMS has no
@@ -126,6 +115,7 @@ window.EFW_I18N = (function () {
       'footer.notifications': 'Eurofurence Notifications',
       'footer.builtBy': 'Built by',
       'footer.source': 'github',
+      'footer.polishVersion': 'Polish version by',
       'footer.units': 'Units',
       'footer.clock': 'Time',
       'footer.wind': 'Wind',
@@ -215,24 +205,13 @@ window.EFW_I18N = (function () {
       'warnings.advance': 'VORABINFORMATION',
       'warnings.advanceNote': 'Vorabinformation: mögliches Unwetter, noch keine amtliche Warnung.',
       'radar.heading': 'Regenradar',
-      'radar.updated': 'Radar aktualisiert',
-      'radar.offline': 'Neuste Radarbilder können gerade nicht geladen werden.',
-      'map.twoFinger': 'Karte mit zwei Fingern bewegen.',
+      'radar.embedNotice': 'Radar: RainViewer',
+      'radar.tapToInteract': 'Zum Interagieren tippen',
 
-      'model.heading': 'Modellkarte (COSMO)',
-      'model.clouds': 'Bewölkung',
-      'model.temperature': 'Temperatur',
-      'model.wind': 'Wind',
-      'model.loading': 'Modellebene wird geladen…',
-      'model.unavailable': 'Modellebene derzeit nicht verfügbar.',
-      'model.run': 'Modelllauf',
-      'model.step': 'Vorhersagestunde',
-      'model.now': 'jetzt',
-      'model.hoursAhead': '{n} Std. nach dem Modelllauf',
-      'model.play': 'Vorhersagestunden abspielen',
-      'model.pause': 'Pause',
-      'model.rain': 'Regen',
-      'model.windNote': 'Pfeile zeigen die Windrichtung.',
+      'map.heading': 'Interaktive Vorhersagekarte',
+      'map.embedNotice': 'Interaktive Vorhersagekarte: Windy',
+      'map.tapToInteract': 'Zum Interagieren tippen',
+      'map.unavailable': 'Die interaktive Vorhersagekarte ist derzeit nicht verfügbar.',
 
       'pollen.alder': 'Erle',
       'pollen.birch': 'Birke',
@@ -254,6 +233,7 @@ window.EFW_I18N = (function () {
       'footer.notifications': 'Eurofurence Notifications',
       'footer.builtBy': 'Gebaut von',
       'footer.source': 'github',
+      'footer.polishVersion': 'Polnische Version von',
       'footer.units': 'Einheiten',
       'footer.clock': 'Uhrzeit',
       'footer.wind': 'Wind',
@@ -263,6 +243,124 @@ window.EFW_I18N = (function () {
       'display.allClear': 'Keine aktiven Warnungen',
       'display.warnings': 'Aktive Warnungen',
       'display.next18': 'Nächste 18 Stunden',
+    },
+
+    pl: {
+      'app.heading': 'Aplikacja pogodowa dla Fursuitingu',
+      'app.offline': 'Offline',
+      'app.error': 'Nie udało się wczytać danych pogodowych',
+      'app.retry': 'Ponowna próba wkrótce…',
+      'app.offlineCopy':
+        'Nie można połączyć się z serwisami. Ostatnia aktualizacja: {when}.',
+      'app.sourceDown':
+        'Serwisy pogodowe są obecnie niedostępne. Prosimy o cierpliwość!',
+      'app.stale': 'Brak aktualizacji od {when}. Warunki mogły się zmienić.',
+
+      'load.busy': 'Większy ruch niż zwykle. Prosimy o cierpliwość.',
+      'load.crowded':
+        'Bardzo duży ruch na stronie. Wczytywanie może potrwać dłużej. Prosimy o cierpliwość!',
+
+      'fsi.heading': 'Wskaźnik Fursuitingu',
+      'fsi.hour': 'godzina prognozy',
+      'fsi.measured': 'zmierzone',
+      'fsi.next24': 'Najbliższe 24 godziny · dotknij słupek, by zobaczyć szczegóły',
+      'fsi.best': 'Najlepszy przedział',
+      'fsi.worst': 'Najgorszy przedział',
+      'fsi.noBest': 'Brak dobrego przedziału w najbliższych 24 godzinach.',
+      'fsi.noWorst': 'Nie ma czego unikać w najbliższych 24 godzinach.',
+      'fsi.peaking': 'szczyt',
+      'fsi.dropping': 'spadek do',
+      'fsi.hours': 'godz.',
+      'fsi.scoreHeader': 'Wynik',
+      'fsi.explainSummary': 'Jak jest to obliczane?',
+      'fsi.explainBody':
+        'Wskaźnik ocenia od 0 do 10, na ile komfortowe i bezpieczne jest przebywanie na zewnątrz w fursuicie. Uwzględnia obciążenie cieplne wynikające z temperatury termometru zwilżonego oraz nasłonecznienia, a także temperaturę, wiatr i prognozowany deszcz. Temperatura termometru zwilżonego to najniższa temperatura, do jakiej organizm może się ochłodzić poprzez pocenie, więc jest niższa od temperatury powietrza. Im bliżej siebie są te dwie wartości, tym mniej pomaga pocenie. Punkt rosy to osobna wartość, która mówi, jak duszne jest powietrze: zwykle powyżej 15°C robi się nieprzyjemnie. Oficjalne ostrzeżenia nie zmieniają wyniku, zostawiając ocenę tobie.',
+      'fsi.weightsHeading': 'Jak liczy się każda część',
+      'fsi.weightsNote':
+        'Poza wagami istnieją inne ograniczenia, które korygują wskaźnik. Na przykład niebezpieczny upał (>36°C) ustawia wskaźnik na 0.',
+      'fsi.weightsAlt': 'Udział poszczególnych czynników w wyniku: {parts}.',
+
+      'band.excellent': 'Doskonałe',
+      'band.good': 'Dobre',
+      'band.fair': 'Znośne',
+      'band.poor': 'Słabe',
+      'band.bad': 'Złe',
+
+      'now.heading': 'Teraz',
+      'now.conditions': 'Warunki',
+      'now.temperature': 'Temperatura',
+      'now.wetbulb': 'Termometr zwilżony',
+      'now.dewpoint': 'Punkt rosy',
+      'now.humidity': 'Wilgotność',
+      'now.wind': 'Wiatr',
+      'now.gusts': 'Porywy',
+      'now.rain1h': 'Deszcz (ostatnia godzina)',
+      'now.pressure': 'Ciśnienie',
+
+      'info.about': 'Co oznacza {term}?',
+      'info.wetbulb':
+        'Temperatura termometru zwilżonego to najniższa temperatura, do jakiej organizm może się ochłodzić poprzez pocenie. Jest zawsze niższa od temperatury powietrza, ale im bliżej siebie są te wartości, tym mniej pomaga pocenie — i z tym musi radzić sobie fursuit.',
+      'info.dewpoint':
+        'Punkt rosy mówi, ile wilgoci niesie powietrze. Poniżej około 12°C powietrze wydaje się suche, od około 15°C zaczyna być nieprzyjemnie.',
+
+      'hour.rain': 'Deszcz (ta godzina)',
+      'hour.rainChance': 'Szansa na deszcz',
+      'hour.close': 'Zamknij',
+      'hour.past': 'Ta godzina już minęła.',
+      'hour.now': 'Teraz',
+      'hour.at': 'O {time}',
+      'hour.backToNow': 'dotknij słupek ponownie, aby wrócić do teraz',
+
+      'days.heading': 'Kolejne dni',
+      'days.best': 'Najlepszy',
+      'days.worst': 'Najgorszy',
+      'days.average': 'Średnia dzienna',
+      'days.scoreUnit': 'Wynik FSI',
+      'days.partial': 'Dostępna prognoza tylko na {n} godz.',
+      'days.noData': 'Brak danych',
+
+      'warnings.more': '+{n} więcej',
+      'warnings.advance': 'INFORMACJA WSTĘPNA',
+      'warnings.advanceNote': 'Informacja wstępna: możliwa groźna pogoda, jeszcze nie ostrzeżenie.',
+      'radar.heading': 'Radar opadów',
+      'radar.embedNotice': 'Radar: RainViewer',
+      'radar.tapToInteract': 'Dotknij, aby wejść w interakcję',
+
+      'map.heading': 'Interaktywna mapa prognozy',
+      'map.embedNotice': 'Interaktywna mapa prognozy: Windy',
+      'map.tapToInteract': 'Dotknij, aby wejść w interakcję',
+      'map.unavailable': 'Interaktywna mapa prognozy jest obecnie niedostępna.',
+
+      'pollen.alder': 'Olcha',
+      'pollen.birch': 'Brzoza',
+      'pollen.grasses': 'Trawy',
+      'pollen.ragweed': 'Ambrozja',
+      'pollen.level.low': 'Niskie',
+      'pollen.level.moderate': 'Umiarkowane',
+      'pollen.level.high': 'Wysokie',
+      'pollen.level.very_high': 'Bardzo wysokie',
+
+      'footer.updated': 'Zaktualizowano',
+      'footer.forecastRun': 'Przebieg prognozy',
+      'footer.data': 'Dane pogodowe',
+      'footer.mapData': 'Dane mapy',
+      'footer.display': 'Wyświetlacz ConOps',
+      'footer.api': 'API pogodowe',
+      'footer.disclaimer':
+        'Oficjalna strona Eurofurence. Zawsze stosuj się do oficjalnych ostrzeżeń, a po ogłoszenia dotyczące konwentu sprawdzaj oficjalny kanał Telegram:',
+      'footer.notifications': 'Eurofurence Notifications',
+      'footer.builtBy': 'Stworzone przez',
+      'footer.source': 'github',
+      'footer.polishVersion': 'Polska wersja przez',
+      'footer.units': 'Jednostki',
+      'footer.clock': 'Czas',
+      'footer.wind': 'Wiatr',
+      'footer.privacy': 'Prywatność',
+      'footer.feedback': 'Opinia',
+      'lang.label': 'Język',
+      'display.allClear': 'Brak aktywnych ostrzeżeń',
+      'display.warnings': 'Aktywne ostrzeżenia',
+      'display.next18': 'Najbliższe 18 godzin',
     },
   };
 
@@ -296,7 +394,10 @@ window.EFW_I18N = (function () {
     if (asked && STRINGS[asked]) return asked;
     const stored = localStorage.getItem(LANG_KEY);
     if (stored && STRINGS[stored]) return stored;
-    return (navigator.language || 'en').toLowerCase().startsWith('de') ? 'de' : 'en';
+    const browser = (navigator.language || 'en').toLowerCase();
+    if (browser.startsWith('de')) return 'de';
+    if (browser.startsWith('pl')) return 'pl';
+    return 'en';
   }
 
   function setLang(lang) {
@@ -423,7 +524,8 @@ window.EFW_I18N = (function () {
     document.documentElement.lang = getLang();
   }
 
-  const locale = () => (getLang() === 'de' ? 'de-DE' : 'en-GB');
+  const LOCALES = { de: 'de-DE', pl: 'pl-PL' };
+  const locale = () => LOCALES[getLang()] || 'en-GB';
 
   return {
     T,

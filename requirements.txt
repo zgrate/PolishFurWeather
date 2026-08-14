@@ -1,8 +1,7 @@
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 requests>=2.32.0
-numpy>=1.26.0        # GRIB2 field decoding
-Pillow>=10.0.0       # renders model fields to PNG
+numpy>=1.26.0        # POLRAD radar-field decoding
 tzdata>=2024.1  # zoneinfo has no tz database on Windows or slim images
 h5py>=3.11.0         # decodes IMGW POLRAD SRI (ODIM_H5) radar composite
 pyproj>=3.6.0        # projects venue lat/lon into POLRAD's azimuthal-equidistant grid
