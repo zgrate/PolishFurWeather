@@ -64,9 +64,9 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  // Someone else's origin is someone else's to cache: the basemap and DWD tiles
-  // come back opaque, so we could not tell a good one from an error page, and
-  // they would swamp the store.
+  // Someone else's origin is someone else's to cache: the basemap tiles come
+  // back opaque, so we could not tell a good one from an error page, and they
+  // would swamp the store.
   if (url.origin !== self.location.origin) return;
   if (SKIP.some((pattern) => pattern.test(url.pathname))) return;
 

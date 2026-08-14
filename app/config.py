@@ -44,15 +44,44 @@ class Location:
 
 
 @dataclass
-class DWDSettings:
-    #: MOSMIX / POI station. 10147 = Hamburg-Fuhlsbuettel.
-    station_id: str = "10147"
-    station_name: str = "Hamburg-Fuhlsbüttel"
-    #: DWD "Warncell" ids to watch. 102000000 = Hansestadt Hamburg.
-    warncells: List[str] = field(default_factory=lambda: ["102000000"])
-    #: WMS layer used for the radar overlay.
-    radar_layer: str = "dwd:Niederschlagsradar"
-    warnings_layer: str = "dwd:Warnungen_Gemeinden"
+class IMGWSettings:
+    """The Polish venue this instance watches.
+
+    Left blank on purpose: the DWD fork could default to Hamburg because DWD's
+    own station table has an entry that happens to be right for it. IMGW's
+    station/TERYT ids do not, and guessing one would silently point the whole
+    site at the wrong town. An operator must fill these in (``config.json``'s
+    ``imgw`` block or the ``EFW_*`` env vars below) before the Polish sources
+    return anything.
+    """
+
+    #: IMGW SYNOP station id, e.g. "12500" (Kraków-Balice). See
+    #: https://danepubliczne.imgw.pl/api/data/synop for the live list.
+    station_id: str = ""
+    station_name: str = ""
+    #: 4-digit powiat TERYT codes the venue sits in, for warning filtering.
+    #: See https://danepubliczne.imgw.pl/pl/dane/warningsmeteo -- each warning
+    #: carries the TERYT codes it applies to, and this list is intersected
+    #: against them.
+    teryt: List[str] = field(default_factory=list)
+    #: IMGW product-catalogue id for the COSMO 2.8km surface dataset. Not the
+    #: transient file URL -- resolved fresh via
+    #: https://danepubliczne.imgw.pl/api/data/product each run.
+    cosmo_product_prefix: str = "COSMO_HVD"
+    #: Radar composite product id (POLCOMP SRI, precipitation rate).
+    radar_product: str = "COMPO_SRI.comp.sri"
+    #: How stale a POLRAD frame may be before it is treated as unavailable.
+    radar_max_age_minutes: int = 15
+
+
+@dataclass
+class OpenMeteoSettings:
+    """Fallback forecast (beyond the COSMO horizon) and pollen (CAMS)."""
+
+    enabled: bool = True
+    #: Extend the forecast with Open-Meteo once COSMO's own horizon ends.
+    forecast_fallback: bool = True
+    pollen_enabled: bool = True
 
 
 @dataclass
@@ -142,25 +171,44 @@ class CapacitySettings:
 
 @dataclass
 class PollenSettings:
-    """The ICON-ART pollen forecast layer.
+    """The CAMS-backed pollen layer (Open-Meteo).
 
-    DWD publishes concentrations in grains/m3, not severity levels, so the bands
-    the map and its key are drawn in are this site's own. They are here rather
-    than in the code so an instance can retune them without a rebuild -- and so
-    it is obvious that they are a judgement call, not something official.
+    CAMS publishes concentrations in grains/m3, not severity levels, so the
+    bands the map and its key are drawn in are this site's own. They are here
+    rather than in the code so an instance can retune them without a rebuild
+    -- and so it is obvious that they are a judgement call, not something
+    official.
     """
 
     #: Set false to drop the allergen picker and the pollen map entirely.
     enabled: bool = True
     #: species -> [moderate, high, very high] lower bounds in grains/m3.
-    #: Anything absent falls back to app/dwd/pollen.py's defaults.
+    #: Anything absent falls back to app/providers/open_meteo/pollen.py's
+    #: defaults. Note CAMS has no hazel product at all -- see that module's
+    #: docstring -- so a "hazel" entry here is unused, not wrong.
     thresholds: Dict[str, List[float]] = field(default_factory=dict)
 
 
 @dataclass
+class NetworkSettings:
+    """Outbound IP family pin and the interface uvicorn binds to.
+
+    See ``app/net.py`` for what the pin actually does and why a host would
+    ever want one; ``bind_host`` just documents/exposes the value the process
+    should be started with (``Dockerfile``'s ``CMD`` still passes ``--host``
+    directly, so this is informational -- e.g. for ``/api/health`` -- rather
+    than something that reaches back and changes how uvicorn was already
+    launched).
+    """
+
+    ip_family: str = "auto"
+    bind_host: str = "0.0.0.0"
+
+
+@dataclass
 class CacheTTL:
-    """Seconds to keep each upstream response. DWD publishes:
-    POI hourly, MOSMIX_L every ~6h, warnings every few minutes."""
+    """Seconds to keep each upstream response. IMGW SYNOP publishes hourly,
+    Open-Meteo's forecast about once an hour, IMGW warnings every few minutes."""
 
     observations: int = 600
     forecast: int = 1800
@@ -171,7 +219,9 @@ class CacheTTL:
 class Settings:
     event: Event = field(default_factory=Event)
     location: Location = field(default_factory=Location)
-    dwd: DWDSettings = field(default_factory=DWDSettings)
+    imgw: IMGWSettings = field(default_factory=IMGWSettings)
+    open_meteo: OpenMeteoSettings = field(default_factory=OpenMeteoSettings)
+    network: NetworkSettings = field(default_factory=NetworkSettings)
     fsi: FSIConfig = field(default_factory=FSIConfig)
     api: APISettings = field(default_factory=APISettings)
     capacity: CapacitySettings = field(default_factory=CapacitySettings)
@@ -207,7 +257,9 @@ def load_settings(path: str | os.PathLike[str] | None = None) -> Settings:
             raw = {}
         _merge(settings.event, raw.get("event", {}))
         _merge(settings.location, raw.get("location", {}))
-        _merge(settings.dwd, raw.get("dwd", {}))
+        _merge(settings.imgw, raw.get("imgw", {}))
+        _merge(settings.open_meteo, raw.get("open_meteo", {}))
+        _merge(settings.network, raw.get("network", {}))
         _merge(settings.fsi, raw.get("fsi", {}))
         _merge(settings.api, raw.get("api", {}))
         _merge(settings.capacity, raw.get("capacity", {}))
@@ -221,10 +273,16 @@ def load_settings(path: str | os.PathLike[str] | None = None) -> Settings:
         logger.warning("Config %s not found -- using built-in defaults", config_path)
 
     # Environment overrides (handy for docker-compose).
-    if station := os.environ.get("EFW_STATION_ID"):
-        settings.dwd.station_id = station
-    if cells := os.environ.get("EFW_WARNCELLS"):
-        settings.dwd.warncells = [c.strip() for c in cells.split(",") if c.strip()]
+    if imgw_station := os.environ.get("EFW_IMGW_STATION_ID"):
+        settings.imgw.station_id = imgw_station
+    if imgw_station_name := os.environ.get("EFW_IMGW_STATION_NAME"):
+        settings.imgw.station_name = imgw_station_name
+    if teryt := os.environ.get("EFW_IMGW_TERYT"):
+        settings.imgw.teryt = [c.strip() for c in teryt.split(",") if c.strip()]
+    if ip_family := os.environ.get("EFW_IP_FAMILY"):
+        settings.network.ip_family = ip_family
+    if bind_host := os.environ.get("EFW_BIND_HOST"):
+        settings.network.bind_host = bind_host
     if name := os.environ.get("EFW_LOCATION_NAME"):
         settings.location.name = name
     if event := os.environ.get("EFW_EVENT_NAME"):
@@ -250,6 +308,19 @@ def load_settings(path: str | os.PathLike[str] | None = None) -> Settings:
         settings.capacity.busy_at, settings.capacity.crowded_at = (
             settings.capacity.crowded_at,
             settings.capacity.busy_at,
+        )
+
+    if not settings.imgw.station_id or not settings.imgw.station_name:
+        logger.warning(
+            "imgw.station_id/station_name not configured -- observations will be "
+            "unavailable until the operator sets them (config.json's 'imgw' block or "
+            "EFW_IMGW_STATION_ID/EFW_IMGW_STATION_NAME)."
+        )
+    if not settings.imgw.teryt:
+        logger.warning(
+            "imgw.teryt not configured -- warnings will be unavailable until the "
+            "operator sets the venue's powiat TERYT code(s) (config.json's 'imgw' "
+            "block or EFW_IMGW_TERYT)."
         )
 
     return settings

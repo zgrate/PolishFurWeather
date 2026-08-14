@@ -1,6 +1,11 @@
 # EurofurenceWeather
 
-Eurofurence Weather is an easy to use tool, that allows convention goers at EF in Hamburg to quickly assess the ability to hang outside either with or without suit.
+Eurofurence Weather is an easy to use tool that allows convention goers to quickly assess
+the ability to hang outside either with or without suit. This is a **Polish-data fork**:
+the original project runs on DWD (Germany); this one runs on
+[IMGW-PIB](https://danepubliczne.imgw.pl) and [Open-Meteo](https://open-meteo.com)
+instead, for conventions in Poland. See [docs/polish-data.md](docs/polish-data.md) for
+exactly what comes from where.
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/B0B6BCXY7)
 ![alt text](media/Site_preview.png "Site preview")
@@ -8,25 +13,29 @@ Eurofurence Weather is an easy to use tool, that allows convention goers at EF i
 My friends and I have always looked for an easy method to answer the following the question: 
 **can I go outside in suit right now?**
 
-I've built this website on [DWD OpenData](https://opendata.dwd.de). It uses MOS-MIX, official weather warnings by DWD, pollen data, current Radar images and creates ICON-D2 maps for better assesment. It features a wide range of features:
+This fork is built on IMGW's public data feeds and Open-Meteo: IMGW SYNOP observations,
+official IMGW meteorological warnings, the COSMO 2.8 km model, and the POLRAD radar
+composite, with Open-Meteo filling in the forecast horizon beyond COSMO's own reach and
+CAMS pollen. It features a wide range of features:
 
 
 - **Fursuiting Index**: a 0–10 score for how comfortable and safe suiting is, with one
   bar per hour and a weather icon above each so you can see how the day builds.
   **Click any bar** for the conditions behind it
-- **Weather overview and warnings**: current conditions, official DWD warnings, and a
+- **Weather overview and warnings**: current conditions, official IMGW warnings, and a
   five-day outlook where **every day gets its own hour-by-hour chart** plus its best and
   worst hour, because during the con every hour matters
-- **Rain radar**: the DWD radar composite on an interactive dark map
-- **Model maps**: ICON-D2 decoded straight from DWD's GRIB2 files: cloud cover with
+- **Rain radar**: the IMGW POLRAD precipitation-rate composite on an interactive dark map
+- **Model maps**: COSMO 2.8 km decoded straight from IMGW's GRIB1 files: cloud cover with
   the rain rate painted on top, 2 m temperature, and 10 m wind with direction arrows.
-  One button per forecast hour out to +48, or press play and watch them run
-- **Pollen**: pick your allergy and the model card grows a tab for it: the DWD ICON-ART
-  forecast for hazel, alder, birch, grasses or ragweed, six days ahead
+  One button per forecast hour out to +60, or press play and watch them run
+- **Pollen**: pick your allergy and the model card grows a tab for it: the Open-Meteo
+  CAMS forecast for alder, birch, grasses or ragweed (CAMS does not publish a hazel
+  product, so hazel is not offered rather than shown as zero)
 - **Works offline**: the page and the last forecast are cached, so it still opens
   on a congested convention network and says how old the numbers are
 - **ConOps display** at `/display`: a full-screen board for the info desk
-- **Public API** at `/api/v1`: versioned, documented, open (see [API](#api))
+- **Public API** at `/api/v1`: versioned, documented, open
 - **EN/DE** language support.
 - **Unit conversion** if you prefer Fahrenheit or a different clock type.
 
@@ -50,6 +59,10 @@ tablet displays. Might not work in older versions of browsers.
 
 ## Quick start
 
+Before starting the container, set the venue's IMGW station and TERYT code — see
+[Configuration](#configuration) below. Without them the app still starts, but
+observations and warnings stay unavailable.
+
 ```bash
 docker compose up -d
 ```
@@ -63,19 +76,38 @@ pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
+## Configuration
+
+This fork does not (and per its own project rules, must not) guess a Polish venue's
+station or coordinates — they need to be set before the IMGW-sourced data works:
+
+| Setting | Env var | Where to find it |
+|---|---|---|
+| IMGW SYNOP station id | `EFW_IMGW_STATION_ID` | [danepubliczne.imgw.pl/api/data/synop](https://danepubliczne.imgw.pl/api/data/synop) |
+| Station display name | `EFW_IMGW_STATION_NAME` | same listing |
+| Powiat TERYT code(s) | `EFW_IMGW_TERYT` (comma-separated) | [danepubliczne.imgw.pl/pl/dane/warningsmeteo](https://danepubliczne.imgw.pl/pl/dane/warningsmeteo) |
+| Venue name/coordinates | `EFW_LOCATION_NAME` / `config.json`'s `location` block | still default to Hamburg from the upstream DWD fork — override for the actual venue, since these also drive the Open-Meteo forecast/pollen point and the model/radar map bounding boxes |
+
+See [docs/polish-data.md](docs/polish-data.md) for the full configuration
+reference and every other `EFW_*` variable.
+
 ## Data sources
 
-Everything comes from DWD, which publishes free of charge under the
-[GeoNutzV](https://www.dwd.de/DE/service/copyright/copyright_node.html) terms.
+Everything comes from IMGW-PIB and Open-Meteo. IMGW data is published under
+its own [terms](https://danepubliczne.imgw.pl/) and requires the attribution
+this app already carries in `meta.attribution`; Open-Meteo is
+[free for non-commercial use](https://open-meteo.com/en/license).
 
 | Source | What it provides | Updates |
 |---|---|---|
-| [MOSMIX_L](https://opendata.dwd.de/weather/local_forecasts/mos/MOSMIX_L/single_stations/) | Hourly point forecast, ~10 days, per station | 4x/day |
-| [POI reports](https://opendata.dwd.de/weather/weather_reports/poi/) | Surface observations, current plus the last ~24 h | hourly |
-| [WarnWetter](https://www.dwd.de/DWD/warnungen/warnapp/json/warnings.json) | Official warnings per Warncell | ~every few minutes |
-| [maps.dwd.de GeoServer](https://maps.dwd.de/geoserver/dwd/wms) | Radar composite + warning areas (WMS) | every 5 min |
-| [ICON-D2 GRIB2](https://opendata.dwd.de/weather/nwp/icon-d2/grib/) | Cloud cover, temperature, wind on a 2 km grid | every 3 h |
-| [ICON-ART pollen NetCDF](https://opendata.dwd.de/climate_environment/health/forecasts/pollen/) | Daily mean pollen concentration, 6 days, ~6.5 km grid. **season only** | daily, ~03:35 UTC |
+| [IMGW SYNOP](https://danepubliczne.imgw.pl/api/data/synop) | Current surface observations, per station | hourly |
+| [IMGW warningsmeteo](https://danepubliczne.imgw.pl/pl/dane/warningsmeteo) | Official meteorological warnings per powiat (TERYT) | ~every few minutes |
+| [IMGW COSMO_HVD (GRIB1)](https://danepubliczne.imgw.pl/api/data/product) | Cloud cover, temperature, wind on a 2.8 km grid | every 6 h, 60 h horizon |
+| [IMGW POLRAD SRI (ODIM_H5)](https://danepubliczne.imgw.pl/api/data/product) | Precipitation-rate radar composite | every 5 min |
+| [Open-Meteo forecast](https://open-meteo.com/en/docs) | Hourly point forecast beyond COSMO's horizon | ~hourly |
+| [Open-Meteo CAMS air quality](https://open-meteo.com/en/docs/air-quality-api) | Pollen (alder, birch, grasses, ragweed — no hazel product) | few times/day |
+
+Full field-by-field mapping and format notes: [docs/polish-data.md](docs/polish-data.md).
 
 ## The Fursuiting Index
 
@@ -101,11 +133,12 @@ the index at 6, 4.0 at 4.5, and 2.0 at 2.5. The chance of rain is folded in as i
 root, not raw: being caught out in suit is far worse than a dry hour is good, and it is a
 call you make an hour ahead.
 
-Warnings are shown **on the hourly bars**, over the hours they cover. A
-*Vorabinformation*. DWD flagging possible severe weather before it is certain enough to
-warn on, is drawn with **red diagonal hatching** so it is never mistaken for a warning in
-force. On the public site the wording collapses to a single line that expands on click;
-the board shows the marks only.
+Warnings are shown **on the hourly bars**, over the hours they cover. The UI still
+supports an "advance notice" style (red diagonal hatching, so it is never mistaken for a
+warning in force) inherited from DWD's *Vorabinformation* concept, but IMGW has no
+equivalent tier — every IMGW-sourced warning carries `advance: false`, so this fork never
+renders it. On the public site the wording collapses to a single line that expands on
+click; the board shows the marks only.
 
 Overlapping warnings are packed into as few rows as they need, and the chart reserves
 exactly that much space, the row count is handed to the stylesheet, so a fourth warning
@@ -119,4 +152,8 @@ AI decliration: AI was used in this project to assist in the building process.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE). Weather data © Deutscher Wetterdienst.
+MIT — see [LICENSE](LICENSE). Weather, warning, model and radar data © Instytut
+Meteorologii i Gospodarki Wodnej – Państwowy Instytut Badawczy (IMGW-PIB). Forecast and
+pollen data © Open-Meteo. Forked from
+[laffiesphere/EurofurenceWeather](https://github.com/laffiesphere/EurofurenceWeather)
+(DWD-based original).

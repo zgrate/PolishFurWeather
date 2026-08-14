@@ -1,4 +1,4 @@
-"""Which IP family outbound DWD requests are allowed to use.
+"""Which IP family outbound requests to IMGW/Open-Meteo are allowed to use.
 
 Off by default: ``network.ip_family = "auto"`` leaves the resolver alone, which
 is what every ordinary dual-stack host wants.
@@ -11,13 +11,13 @@ quietly falls back to IPv4.
 
 A warning before anyone turns this on
 -------------------------------------
-DWD publishes **A records only**. opendata.dwd.de, maps.dwd.de and www.dwd.de
-have no AAAA record at all, so an IPv6-only container cannot reach them
-directly, and every fetch fails with ``Network is unreachable``. On such a host
-the fix is NAT64/DNS64 (the resolver synthesises an AAAA and a gateway does the
-translation), or an outbound HTTP proxy that has IPv4 -- not this setting. The
-preflight below says so out loud at startup rather than leaving it to be
-guessed from a wall of connection errors.
+If any upstream here turns out to be IPv4-only the same problem DWD used to
+have applies: an IPv6-only container cannot reach it directly, and every fetch
+fails with ``Network is unreachable``. On such a host the fix is NAT64/DNS64
+(the resolver synthesises an AAAA and a gateway does the translation), or an
+outbound HTTP proxy that has IPv4 -- not this setting. The preflight below
+says so out loud at startup rather than leaving it to be guessed from a wall
+of connection errors.
 """
 
 from __future__ import annotations
@@ -42,7 +42,11 @@ _SOCKET_FAMILY = {
 _LABEL = {"auto": "auto", "ipv4": "IPv4", "ipv6": "IPv6"}
 
 #: Every host this application talks to. Used by the preflight only.
-UPSTREAM_HOSTS = ("opendata.dwd.de", "maps.dwd.de", "www.dwd.de")
+UPSTREAM_HOSTS = (
+    "danepubliczne.imgw.pl",
+    "api.open-meteo.com",
+    "air-quality-api.open-meteo.com",
+)
 
 #: urllib3's own hook, kept so a pin can be lifted again (mainly for tests).
 _original_allowed_gai_family = urllib3_connection.allowed_gai_family
@@ -119,7 +123,7 @@ def preflight(hosts: Optional[List[str]] = None) -> Dict[str, bool]:
         logger.error(
             "network.ip_family is %r but %s publish no %s address. Requests to them "
             "will fail with 'Network is unreachable'. On an IPv6-only host you need "
-            "DNS64/NAT64 (or an outbound proxy with IPv4) -- DWD is IPv4-only.",
+            "DNS64/NAT64 (or an outbound proxy with IPv4).",
             family,
             ", ".join(missing),
             "AAAA" if family == "ipv6" else "A",

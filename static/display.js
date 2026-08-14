@@ -55,7 +55,7 @@ const clock24 = (value) =>
   new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 /* The clock ticks independently so the display never looks frozen, even if a
-   refresh fails or DWD is briefly unreachable. */
+   refresh fails or an upstream source is briefly unreachable. */
 function tick() {
   setText(
     'clock',
@@ -96,9 +96,9 @@ function chartRanges(data) {
 
 /* --------------------------------------------------------------- alerts bar */
 
-/* One chip. `tone` carries the colour the chip is drawn in, which for a DWD
-   warning is DWD's own -- their severity palette is what staff already read on
-   the official app. */
+/* One chip. `tone` carries the colour the chip is drawn in, which for an
+   official warning is IMGW's own -- their severity palette is what staff
+   already read on the official app. */
 function alertChip(mark, title, detail, tone, extraClass) {
   const chip = document.createElement('div');
   chip.className = extraClass ? `alert ${extraClass}` : 'alert';
@@ -121,15 +121,14 @@ function alertChip(mark, title, detail, tone, extraClass) {
   return chip;
 }
 
-/** "until 20:00", or nothing at all if DWD did not say when it ends. */
+/** "until 20:00", or nothing at all if the warning did not say when it ends. */
 function warningWindow(warning) {
   if (!warning.end) return '';
   return `until ${clock24(warning.end)}`;
 }
 
-/* Official DWD warnings first, then pollen. Pollen only speaks up at "high" --
-   DWD's own threshold for heavy exposure -- because grass counts sit above the
-   moderate line for most of a northern-German summer, and a strip that is lit
+/* Official warnings first, then pollen. Pollen only speaks up at "high" --
+   this site's own threshold for heavy exposure -- because a strip that is lit
    every day is a strip nobody reads. */
 function renderAlerts(data) {
   const host = $('alerts');
@@ -156,7 +155,7 @@ function renderAlerts(data) {
         `Pollen: ${EFW_I18N.T(`pollen.${reading.key}`)} ${EFW_I18N.T(
           `pollen.level.${reading.level}`
         ).toLowerCase()}`,
-        `${fmt(reading.value, 0)} grains/m³ · DWD forecast, not a measurement`,
+        `${fmt(reading.value, 0)} grains/m³ · CAMS forecast, not a measurement`,
         reading.color,
         'is-pollen'
       )

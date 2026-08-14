@@ -1,21 +1,27 @@
 {
   "event": {
-    "name": "EF30",
-    "short_name": "EF30"
+    "name": "Krakowo",
+    "short_name": "SPRAWDZ BURZE"
   },
   "location": {
-    "name": "Hamburg",
-    "latitude": 53.561337,
-    "longitude": 9.986310,
-    "timezone": "Europe/Berlin",
-    "elevation": 16
+    "name": "Kraków",
+    "latitude": 50.0647,
+    "longitude": 19.9450,
+    "timezone": "Europe/Warsaw",
+    "elevation": 219
   },
-  "dwd": {
-    "station_id": "10147",
-    "station_name": "Hamburg-Fuhlsbüttel",
-    "warncells": ["102000000"],
-    "radar_layer": "dwd:Niederschlagsradar",
-    "warnings_layer": "dwd:Warnungen_Gemeinden"
+  "imgw": {
+    "station_id": "12566",
+    "station_name": "Kraków",
+    "teryt": ["1261"],
+    "cosmo_product_prefix": "COSMO_HVD",
+    "radar_product": "COMPO_SRI.comp.sri",
+    "radar_max_age_minutes": 15
+  },
+  "open_meteo": {
+    "enabled": true,
+    "forecast_fallback": true,
+    "pollen_enabled": true
   },
   "fsi": {
     "weights": {

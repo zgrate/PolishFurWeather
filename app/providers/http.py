@@ -1,8 +1,10 @@
-"""Shared HTTP session and a small TTL cache for DWD OpenData requests.
+"""Shared HTTP session and a small TTL cache, used by every provider.
 
-Everything here is deliberately synchronous: the endpoints are hit at most a
-few times per hour thanks to the cache, and FastAPI runs sync route helpers in
-a threadpool.
+Everything here is deliberately synchronous: upstream endpoints are hit at
+most a few times per hour thanks to the cache, and FastAPI runs sync route
+helpers in a threadpool. This module has no opinion about which upstream it
+talks to -- IMGW, Open-Meteo, whatever comes next -- that belongs in the
+provider modules.
 """
 
 from __future__ import annotations
@@ -34,20 +36,20 @@ def get_session() -> requests.Session:
 class TTLCache:
     """Cache that also keeps the last good value as a fallback.
 
-    If DWD is briefly unreachable we would rather show slightly stale data than
-    an error page, so ``get_or_fetch`` falls back to the expired entry when the
-    refresh raises.
+    If an upstream is briefly unreachable we would rather show slightly stale
+    data than an error page, so ``get_or_fetch`` falls back to the expired
+    entry when the refresh raises.
 
     One refresh per key runs at a time. Without that, the moment an entry
     expires every request that happens to be in flight fetches the same file
-    from DWD at once -- a hundred people opening the page in the same second
-    turned into a hundred identical downloads. Callers that already hold a stale
-    value get it back immediately rather than queueing behind the refresh; only
-    a cold key waits.
+    at once -- a hundred people opening the page in the same second turned
+    into a hundred identical downloads. Callers that already hold a stale
+    value get it back immediately rather than queueing behind the refresh;
+    only a cold key waits.
 
-    ``max_entries`` bounds the store for caches of large values (the decoded
-    model fields are megabytes each and are keyed per run and forecast hour, so
-    an unbounded store grows until the container is killed).
+    ``max_entries`` bounds the store for caches of large values (decoded
+    model fields are megabytes each and are keyed per run and forecast hour,
+    so an unbounded store grows until the container is killed).
     """
 
     def __init__(self, max_entries: Optional[int] = None) -> None:
@@ -128,10 +130,10 @@ class TTLCache:
 
 cache = TTLCache()
 
-#: Decoded GRIB2 and NetCDF grids: one ICON-D2 field is a 1215x746 float64
-#: array, about 7 MB, and the map card can ask for 48 forecast hours of five of
-#: them. Capped so a run through the animation cannot walk the container into
-#: its memory limit; evicted fields are re-fetched from DWD if asked for again.
+#: Decoded GRIB/HDF5 fields: one COSMO field is a few hundred KB to a few MB,
+#: and the map card can ask for many forecast hours of several of them.
+#: Capped so a run through the animation cannot walk the container into its
+#: memory limit; evicted fields are re-fetched from IMGW if asked for again.
 field_cache = TTLCache(max_entries=32)
 
 
@@ -139,3 +141,9 @@ def fetch_bytes(url: str, timeout: Optional[int] = None) -> bytes:
     response = get_session().get(url, timeout=timeout or settings.request_timeout)
     response.raise_for_status()
     return response.content
+
+
+def fetch_json(url: str, timeout: Optional[int] = None) -> Any:
+    response = get_session().get(url, timeout=timeout or settings.request_timeout)
+    response.raise_for_status()
+    return response.json()

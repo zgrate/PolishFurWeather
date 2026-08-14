@@ -431,8 +431,9 @@ window.EFW = (function () {
 
   /**
    * Turn warnings into chart ranges. A Vorabinformation is drawn hatched in red:
-   * it is DWD flagging possible severe weather, not a warning in force, and the
-   * two must not look alike.
+   * it is a service flagging possible severe weather, not a warning in force,
+   * and the two must not look alike. IMGW has no such tier, so `advance` is
+   * always false for IMGW-sourced warnings and this path never fires for them.
    */
   function warningRanges(warnings, options = {}) {
     const { withLabel = true } = options;

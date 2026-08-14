@@ -31,7 +31,7 @@ class Meta(BaseModel):
     latitude: float
     longitude: float
     timezone: str = Field(examples=["Europe/Berlin"])
-    station_id: str = Field(description="DWD station used for observations and MOSMIX")
+    station_id: str = Field(description="IMGW SYNOP station used for observations")
     generated_at: str = Field(description="ISO 8601, UTC")
     language: str = Field(examples=["en", "de"])
     attribution: str
@@ -132,7 +132,7 @@ class ForecastHour(BaseModel):
 
 class Forecast(BaseModel):
     hours: List[ForecastHour]
-    issued_at: Optional[str] = Field(default=None, description="MOSMIX run time")
+    issued_at: Optional[str] = Field(default=None, description="Forecast fetch time")
     meta: Meta
 
 
@@ -186,21 +186,21 @@ class Daily(BaseModel):
 
 
 class WarningItem(BaseModel):
-    event: str = Field(description="DWD's own German event name")
+    event: str = Field(description="The issuing service's own event name, in its native language")
     label: str = Field(description="Translated heading, e.g. 'Heat warning (moderate)'")
     kind: str = Field(examples=["heat", "thunderstorm", "wind", "rain"])
     severity: str = Field(examples=["minor", "moderate", "severe", "extreme"])
     advance: bool = Field(
         description="True for a Vorabinformation -- possible severe weather, not yet certain"
     )
-    level: int = Field(description="Raw DWD level")
+    level: int = Field(description="The issuing service's own raw severity level/degree")
     color: str
     region: str
     start: Optional[str] = None
     end: Optional[str] = None
-    headline: str = Field(description="Official wording, German")
-    description: str = Field(description="Official wording, German")
-    instruction: str = Field(description="Official wording, German")
+    headline: str = Field(description="Official wording, Polish")
+    description: str = Field(description="Official wording, Polish")
+    instruction: str = Field(description="Official wording, Polish")
 
 
 class Warnings(BaseModel):

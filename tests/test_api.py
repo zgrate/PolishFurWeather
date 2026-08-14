@@ -1,4 +1,4 @@
-"""API tests. DWD is stubbed out so the suite runs offline and deterministically."""
+"""API tests. IMGW/Open-Meteo are stubbed out so the suite runs offline and deterministically."""
 
 from __future__ import annotations
 
@@ -9,32 +9,60 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import service
-from app.dwd import icon, mosmix, observations, pollen
-from app.dwd import warnings as dwd_warnings
-from app.dwd.client import cache, field_cache
+from app.config import settings
 from app.main import app
 from app.models import WeatherPoint, Warning
+from app.providers import poland
+from app.providers.http import cache, field_cache
+from app.providers.imgw import cosmo as imgw_cosmo
+from app.providers.imgw import radar as imgw_radar
+
+#: A fixed run so /api/model never reaches the network for its "latest run"
+#: probe -- describe_parameters() swallows a failure there into "unavailable"
+#: rather than raising, which would hide a live call behind a green suite.
+FIXED_RUN = datetime(2026, 8, 13, 0, tzinfo=timezone.utc)
+
+RADAR_INFO = {
+    "provider": "imgw-polrad",
+    "product": "COMPO_SRI.comp.sri",
+    "available": True,
+    "valid_time": "2026-08-13T12:00:00+00:00",
+    "bbox": {"min_lat": 52.0, "min_lon": 18.0, "max_lat": 54.0, "max_lon": 20.0},
+    "image_url": "/api/radar.png",
+    "attribution": (
+        "Źródłem pochodzenia danych jest Instytut Meteorologii i Gospodarki Wodnej "
+        "– Państwowy Instytut Badawczy."
+    ),
+    "refresh_seconds": 240,
+}
 
 
 @pytest.fixture(autouse=True)
 def clear_cache(monkeypatch):
     cache.clear()
     field_cache.clear()
-    # Every summary now reads the pollen over the venue, which means a NetCDF
+    # A real venue is left blank in config.json on purpose (see IMGWSettings'
+    # docstring) -- tests stand in a fixture station rather than guessing one.
+    monkeypatch.setattr(settings.imgw, "station_id", "12375")
+    monkeypatch.setattr(settings.imgw, "station_name", "Kraków-Balice")
+    monkeypatch.setattr(settings.imgw, "teryt", ["1261"])
+    # Every summary now reads the pollen over the venue, which means a CAMS
     # file per species in season. No test may go and get one: the blanket stub
     # is here rather than in each fixture so a test added later cannot quietly
     # put the suite back on the network. Fixtures that want a reading set their
     # own on top of this.
-    monkeypatch.setattr(pollen, "at_point", lambda *a, **k: [])
+    monkeypatch.setattr(poland, "pollen_at_point", lambda *a, **k: [])
+    monkeypatch.setattr(poland, "radar_info", lambda *a, **k: dict(RADAR_INFO))
+    monkeypatch.setattr(imgw_cosmo, "latest_run", lambda: FIXED_RUN)
     yield
     cache.clear()
     field_cache.clear()
 
 
-#: A real pollen reading means downloading a NetCDF file per species in season,
-#: so every fixture below stubs it: the suite is offline. Moderate rather than
-#: high, so the default board has nothing to shout about and a test that wants a
-#: warning has to ask for one.
+#: A real pollen reading means downloading a CAMS NetCDF file per species in
+#: season, so every fixture below stubs it: the suite is offline. Moderate
+#: rather than high, so the default board has nothing to shout about and a
+#: test that wants a warning has to ask for one.
 GRASSES_MODERATE = {
     "key": "grasses",
     "value": 12.0,
@@ -69,28 +97,28 @@ def _series(hours: int = 30) -> list[WeatherPoint]:
 
 
 @pytest.fixture
-def stub_dwd(monkeypatch):
+def stub_sources(monkeypatch):
     points = _series()
-    monkeypatch.setattr(observations, "fetch_current", lambda *a, **k: points[0])
+    monkeypatch.setattr(poland, "fetch_current", lambda *a, **k: points[0])
     # Nothing to repair in a stubbed day; see test_elapsed_gaps_are_filled.
-    monkeypatch.setattr(observations, "fetch_recent", lambda *a, **k: [])
+    monkeypatch.setattr(poland, "fetch_recent", lambda *a, **k: [])
     monkeypatch.setattr(
-        mosmix,
+        poland,
         "fetch_forecast",
         lambda *a, **k: {
             "points": points,
             "issued": datetime.now(timezone.utc),
-            "station_name": "HAMBURG-FU.",
+            "station_name": "KRAKOW-BALICE",
             "extremes": {},
         },
     )
-    monkeypatch.setattr(dwd_warnings, "fetch_warnings", lambda *a, **k: [])
-    monkeypatch.setattr(pollen, "at_point", lambda *a, **k: [dict(GRASSES_MODERATE)])
+    monkeypatch.setattr(poland, "fetch_warnings", lambda *a, **k: [])
+    monkeypatch.setattr(poland, "pollen_at_point", lambda *a, **k: [dict(GRASSES_MODERATE)])
     return points
 
 
 @pytest.fixture
-def client(stub_dwd):
+def client(stub_sources):
     return TestClient(app)
 
 
@@ -98,29 +126,29 @@ def client(stub_dwd):
 def elapsed_client(monkeypatch):
     """A forecast shaped like the real one: today's elapsed hours come first.
 
-    MOSMIX steps that have gone by are kept so the charts can grey them out
-    behind a "now" line, which means everything answering "what next" has to
-    skip past them explicitly.
+    Open-Meteo steps that have gone by are kept so the charts can grey them
+    out behind a "now" line, which means everything answering "what next" has
+    to skip past them explicitly.
     """
     now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     points = _series(hours=36)
     for offset, point in enumerate(points):
         point.time = now - timedelta(hours=5) + timedelta(hours=offset)
 
-    monkeypatch.setattr(observations, "fetch_current", lambda *a, **k: points[5])
-    monkeypatch.setattr(observations, "fetch_recent", lambda *a, **k: [])
+    monkeypatch.setattr(poland, "fetch_current", lambda *a, **k: points[5])
+    monkeypatch.setattr(poland, "fetch_recent", lambda *a, **k: [])
     monkeypatch.setattr(
-        mosmix,
+        poland,
         "fetch_forecast",
         lambda *a, **k: {
             "points": points,
             "issued": now,
-            "station_name": "HAMBURG-FU.",
+            "station_name": "KRAKOW-BALICE",
             "extremes": {},
         },
     )
-    monkeypatch.setattr(dwd_warnings, "fetch_warnings", lambda *a, **k: [])
-    monkeypatch.setattr(pollen, "at_point", lambda *a, **k: [dict(GRASSES_MODERATE)])
+    monkeypatch.setattr(poland, "fetch_warnings", lambda *a, **k: [])
+    monkeypatch.setattr(poland, "pollen_at_point", lambda *a, **k: [dict(GRASSES_MODERATE)])
     return TestClient(app)
 
 
@@ -147,7 +175,7 @@ def test_summary_has_every_section(client):
     }
     assert body["fsi_series"]
     assert body["daily"]
-    assert body["radar"]["layer"]
+    assert body["radar"]["provider"]
     assert body["degraded"] == []
 
 
@@ -176,11 +204,11 @@ def test_static_assets_are_served(client):
     assert client.get("/style.css").status_code == 200
 
 
-def test_summary_degrades_when_observations_fail(monkeypatch, stub_dwd):
+def test_summary_degrades_when_observations_fail(monkeypatch, stub_sources):
     def boom(*args, **kwargs):
-        raise RuntimeError("DWD unreachable")
+        raise RuntimeError("IMGW unreachable")
 
-    monkeypatch.setattr(observations, "fetch_current", boom)
+    monkeypatch.setattr(poland, "fetch_current", boom)
     body = TestClient(app).get("/api/summary").json()
 
     # The forecast still carries the page; the failure is reported, not fatal.
@@ -191,22 +219,34 @@ def test_summary_degrades_when_observations_fail(monkeypatch, stub_dwd):
 
 def test_summary_fails_loudly_when_every_source_is_down(monkeypatch):
     def boom(*args, **kwargs):
-        raise RuntimeError("DWD unreachable")
+        raise RuntimeError("IMGW unreachable")
 
-    monkeypatch.setattr(observations, "fetch_current", boom)
-    monkeypatch.setattr(mosmix, "fetch_forecast", boom)
-    monkeypatch.setattr(dwd_warnings, "fetch_warnings", boom)
+    monkeypatch.setattr(poland, "fetch_current", boom)
+    monkeypatch.setattr(poland, "fetch_forecast", boom)
+    monkeypatch.setattr(poland, "fetch_warnings", boom)
 
     assert TestClient(app).get("/api/summary").status_code == 503
 
 
-def test_no_radar_proxy_is_served(client):
-    """The browser fetches radar tiles from DWD itself; we are not in the way.
+def test_radar_image_is_served_when_a_frame_is_available(client, monkeypatch):
+    monkeypatch.setattr(
+        imgw_radar,
+        "render",
+        lambda bbox, width, height: {
+            "png": b"\x89PNG\r\n\x1a\n" + b"0" * 16,
+            "valid": datetime.now(timezone.utc),
+            "min": 0.0,
+            "max": 3.5,
+        },
+    )
+    response = client.get("/api/radar.png")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
 
-    Serving other people's imagery from this machine turned every map pan into
-    our bandwidth, and an open image endpoint into an amplifier. If someone
-    reinstates one, this is where they should have to think about it first.
-    """
+
+def test_radar_image_404s_without_a_fresh_frame(client, monkeypatch):
+    """A missing/stale POLRAD frame is an answer, not a fabricated picture."""
+    monkeypatch.setattr(imgw_radar, "render", lambda bbox, width, height: None)
     assert client.get("/api/radar.png").status_code == 404
 
 
@@ -218,14 +258,14 @@ def test_summary_carries_the_pollen_reading(client):
     assert reading["warn"] is False
 
 
-def test_pollen_never_takes_the_page_down_with_it(monkeypatch, stub_dwd):
+def test_pollen_never_takes_the_page_down_with_it(monkeypatch, stub_sources):
     """A research forecast off a once-daily file is the least important thing
     on the page, and must never be the reason the weather does not load."""
 
     def boom(*args, **kwargs):
-        raise RuntimeError("opendata.dwd.de unreachable")
+        raise RuntimeError("air-quality-api.open-meteo.com unreachable")
 
-    monkeypatch.setattr(pollen, "at_point", boom)
+    monkeypatch.setattr(poland, "pollen_at_point", boom)
     body = TestClient(app).get("/api/summary").json()
 
     assert body["pollen"] == []
@@ -233,10 +273,11 @@ def test_pollen_never_takes_the_page_down_with_it(monkeypatch, stub_dwd):
     assert body["daily"]
 
 
-def test_radar_block_still_names_the_layer(client):
-    """The map needs the layer name and the area, and nothing else."""
+def test_radar_block_names_the_provider(client):
+    """The map needs an image URL and the area, and nothing else."""
     radar = client.get("/api/summary").json()["radar"]
-    assert radar["layer"]
+    assert radar["provider"]
+    assert radar["image_url"]
     assert {"min_lat", "min_lon", "max_lat", "max_lon"} <= set(radar["bbox"])
     assert "age_seconds" not in radar
 
@@ -462,7 +503,7 @@ def test_todays_best_hour_is_still_ahead(elapsed_client):
 def test_current_falls_back_to_the_hour_we_are_in(monkeypatch, elapsed_client):
     """Without an observation the fallback used to be points[0], which is now
     the first hour of *today*, not the hour we are in."""
-    monkeypatch.setattr(observations, "fetch_current", lambda *a, **k: None)
+    monkeypatch.setattr(poland, "fetch_current", lambda *a, **k: None)
     cache.clear()
     field_cache.clear()
 
@@ -471,27 +512,27 @@ def test_current_falls_back_to_the_hour_we_are_in(monkeypatch, elapsed_client):
 
 
 def _stub_sources(monkeypatch, now, forecast, observed):
-    """Both DWD sources under a clock pinned to `now`.
+    """Both IMGW/Open-Meteo sources under a clock pinned to `now`.
 
     The repair only has work to do part-way through a local day, so the hour has
     to be chosen rather than inherited from whenever the suite happens to run --
     at 00:xx local nothing has elapsed yet and the test would prove nothing.
     """
     monkeypatch.setattr(service, "hour_now", lambda: now)
-    monkeypatch.setattr(observations, "fetch_current", lambda *a, **k: observed[-1])
-    monkeypatch.setattr(observations, "fetch_recent", lambda *a, **k: observed)
+    monkeypatch.setattr(poland, "fetch_current", lambda *a, **k: observed[-1])
+    monkeypatch.setattr(poland, "fetch_recent", lambda *a, **k: observed)
     monkeypatch.setattr(
-        mosmix,
+        poland,
         "fetch_forecast",
         lambda *a, **k: {
             "points": forecast,
             "issued": now,
-            "station_name": "HAMBURG-FU.",
+            "station_name": "KRAKOW-BALICE",
             "extremes": {},
         },
     )
-    monkeypatch.setattr(dwd_warnings, "fetch_warnings", lambda *a, **k: [])
-    monkeypatch.setattr(pollen, "at_point", lambda *a, **k: [dict(GRASSES_MODERATE)])
+    monkeypatch.setattr(poland, "fetch_warnings", lambda *a, **k: [])
+    monkeypatch.setattr(poland, "pollen_at_point", lambda *a, **k: [dict(GRASSES_MODERATE)])
     return TestClient(app)
 
 
@@ -506,13 +547,13 @@ def _local_midday() -> datetime:
 def test_elapsed_gaps_are_filled_from_observations(monkeypatch):
     """A restart used to lose today's greyed-out hours until midnight.
 
-    ``mosmix._merge_history`` only remembers the hours a newer MOSMIX run
-    dropped for as long as the process lives, so a deploy at midday left the
-    chart starting at whenever the current run begins. The POI report carries
+    Open-Meteo's own history only remembers the hours a newer run dropped for
+    as long as the process lives, so a deploy at midday left the chart
+    starting at whenever the current run begins. IMGW's SYNOP history carries
     the same hours as measurements, so they come back from there instead.
     """
     now = _local_midday()
-    # A run that begins in an hour, exactly as MOSMIX_L does the moment it lands.
+    # A run that begins in an hour, exactly as a fresh Open-Meteo fetch does.
     forecast = _series(hours=12)
     for offset, point in enumerate(forecast):
         point.time = now + timedelta(hours=offset + 1)
@@ -520,7 +561,7 @@ def test_elapsed_gaps_are_filled_from_observations(monkeypatch):
     observed = _series(hours=6)
     for offset, point in enumerate(observed):
         point.time = now - timedelta(hours=5 - offset)
-        point.source = "poi"
+        point.source = "synop"
 
     client = _stub_sources(monkeypatch, now, forecast, observed)
     series = client.get("/api/summary").json()["fsi_series"]
@@ -545,7 +586,7 @@ def test_observed_hours_never_overwrite_the_forecast(monkeypatch):
     for offset, point in enumerate(observed):
         point.time = now - timedelta(hours=4 - offset)
         point.temperature = -40.0  # unmistakable if it leaks through
-        point.source = "poi"
+        point.source = "synop"
 
     client = _stub_sources(monkeypatch, now, forecast, observed)
     series = {
@@ -601,18 +642,18 @@ def test_model_layers_publish_the_steps_they_are_drawn_in(client):
 def test_cloud_bands_are_eighths_from_one_to_full():
     """Sky cover is reported in oktas; 0/8 has no swatch because a clear sky is
     drawn as nothing at all."""
-    bands = icon._bands("clouds")
+    bands = imgw_cosmo._bands("clouds")
     assert [band["label"] for band in bands] == [f"{n}/8" for n in range(1, 9)]
 
 
 def test_cloud_field_rounds_up_to_the_next_okta():
     """Any cloud at all is at least 1/8, and only a truly clear sky is 0."""
     values = np.array([0.0, 0.1, 12.5, 12.6, 99.9, 100.0])
-    assert list(icon._oktas(values)) == [0, 1, 1, 2, 8, 8]
+    assert list(imgw_cosmo._oktas(values)) == [0, 1, 1, 2, 8, 8]
 
 
 def test_temperature_bands_are_two_degrees_on_even_numbers():
-    bands = icon._bands("temperature")
+    bands = imgw_cosmo._bands("temperature")
     assert all(band["to"] - band["from"] == 2.0 for band in bands)
     assert all(band["from"] % 2 == 0 for band in bands)
 

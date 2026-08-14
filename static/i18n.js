@@ -13,7 +13,7 @@ window.EFW_I18N = (function () {
       'app.offlineCopy':
         'Unable to fetch services. Last update: {when}.',
       'app.sourceDown':
-        'DWD services can\'t be reached right now. Please stay patient!',
+        'Weather services can\'t be reached right now. Please stay patient!',
       'app.stale': 'Not refreshed since {when}. The conditions may have moved on.',
 
       /* Says a crowd is here, never what the site runs on -- it is EF's server now. */
@@ -35,7 +35,7 @@ window.EFW_I18N = (function () {
       'fsi.scoreHeader': 'Score',
       'fsi.explainSummary': 'How is this calculated?',
       'fsi.explainBody':
-        'The Index ranks the ability to be in a fursuit outdoors, from 0 to 10. It weighs heat stress from the wet-bulb temperature plus sun load, as well as temperature and wind and forecasted rain. Wet-bulb is the temperature your body can get cool down by sweating, so it reads lower than the air temperature. And the closer the two are, the less sweating helps. Dew point is a separate figure and says how clammy the air feels: Usually above 15 °C is uncomfortable. DWD warnings don\'t change the score, leaving you to judge.',
+        'The Index ranks the ability to be in a fursuit outdoors, from 0 to 10. It weighs heat stress from the wet-bulb temperature plus sun load, as well as temperature and wind and forecasted rain. Wet-bulb is the temperature your body can get cool down by sweating, so it reads lower than the air temperature. And the closer the two are, the less sweating helps. Dew point is a separate figure and says how clammy the air feels: Usually above 15 °C is uncomfortable. Official warnings don\'t change the score, leaving you to judge.',
       'fsi.weightsHeading': 'How much each part counts',
       'fsi.weightsNote':
         'Beyond the weighting, there are other limits that adjust the Index. Dangerous heat (>36°C/96°F) sets the Index to 0, for example.',
@@ -84,12 +84,11 @@ window.EFW_I18N = (function () {
       'warnings.advance': 'ADVANCE NOTICE',
       'warnings.advanceNote': 'Advance notice: possible severe weather, not yet a warning in force.',
       'radar.heading': 'Rain radar',
-      'radar.showWarnings': 'Show warning areas',
       'radar.updated': 'Radar updated',
       'radar.offline': 'Unable to load fetch Radar at this moment.',
       'map.twoFinger': 'Use two fingers to move the map.',
 
-      'model.heading': 'Model maps from ICON (DWD)',
+      'model.heading': 'Model maps (COSMO)',
       'model.clouds': 'Clouds',
       'model.temperature': 'Temperature',
       'model.wind': 'Wind',
@@ -103,38 +102,27 @@ window.EFW_I18N = (function () {
       'model.pause': 'Pause',
       'model.rain': 'Rain',
       'model.windNote': 'Arrows point the way the wind blows.',
-      'model.pollen': 'Pollen',
-      'model.daysAhead': '{n} days after the model run',
-      'model.today': 'today',
-      'model.stepDay': 'Forecast day',
 
-      'pollen.label': 'Allergy',
-      'pollen.none': 'None',
-      'pollen.hazel': 'Hazel',
+      /* Species names and levels for the point pollen reading on the ConOps
+         board (display.js) -- CAMS, via Open-Meteo. No hazel key: CAMS has no
+         hazel product at all, so the site never asks for one. */
       'pollen.alder': 'Alder',
       'pollen.birch': 'Birch',
       'pollen.grasses': 'Grasses',
       'pollen.ragweed': 'Ragweed',
-      'pollen.offSeason': 'out of season',
-      'pollen.notInSeason':
-        '{species} is out of season. DWD publishes it from {start} to {end}.',
-      'pollen.pick': 'Pick an allergy above to see its forecast here.',
       'pollen.level.low': 'Low',
       'pollen.level.moderate': 'Moderate',
       'pollen.level.high': 'High',
       'pollen.level.very_high': 'Very high',
-      'pollen.source': 'ICON-ART daily mean, DWD.',
-      'pollen.caveat':
-        'Research data. DWD states it is not suitable for clinical use. The low/high bands are this site’s own.',
 
       'footer.updated': 'Updated',
-      'footer.mosmixRun': 'MOSMIX run',
+      'footer.forecastRun': 'Forecast run',
       'footer.data': 'Weather data',
       'footer.mapData': 'Map data',
       'footer.display': 'ConOps display',
       'footer.api': 'Weather API',
       'footer.disclaimer':
-        'Official Eurofurence site. Always follow the official DWD warnings, and for convention announcements the official Telegram channel:',
+        'Official Eurofurence site. Always follow the official warnings, and for convention announcements the official Telegram channel:',
       'footer.notifications': 'Eurofurence Notifications',
       'footer.builtBy': 'Built by',
       'footer.source': 'github',
@@ -145,7 +133,7 @@ window.EFW_I18N = (function () {
       'footer.feedback': 'Feedback',
       'lang.label': 'Language',
       'display.allClear': 'No active warnings',
-      'display.warnings': 'Active DWD warnings',
+      'display.warnings': 'Active warnings',
       'display.next18': 'Next 18 hours',
     },
 
@@ -157,7 +145,7 @@ window.EFW_I18N = (function () {
       'app.offlineCopy':
         'Die Services können gerade nicht erreicht werden. Du siehst die Vorhersage von {when}.',
       'app.sourceDown':
-        'Gerade sind die DWD-Services nicht erreichbar. Bitte geduldig bleiben!',
+        'Gerade sind die Wetter-Services nicht erreichbar. Bitte geduldig bleiben!',
       'app.stale': 'Seit {when} nicht aktualisiert. Die Lage kann sich geändert haben.',
 
       'load.busy': 'Gerade sind viele Leute auf der Seite, das Laden kann etwas dauern.',
@@ -178,7 +166,7 @@ window.EFW_I18N = (function () {
       'fsi.scoreHeader': 'Punkte',
       'fsi.explainSummary': 'Wie wird der Index berechnet?',
       'fsi.explainBody':
-        'Der Index bewertet von 0 bis 10, wie angenehm und sicher es im Fursuit draußen ist. Er gewichtet die Hitzebelastung aus der Feuchtkugeltemperatur und der Sonneneinstrahlung, zusammen mit Wind und Niederschlagsvorhersage. Die Feuchtkugeltemperatur ist eine Temperatur, den dein Körper durchs Schwitzen  minimal erreichen kann. Sie liegt unter der echten Lufttemperatur, und je näher beide beieinander liegen, desto weniger bringt das Schwitzen. Der Taupunkt ist eine eigene Größe und sagt, wie schwül sich die Luft anfühlt: ab etwa 15 °C wird es klamm. Amtliche DWD-Warnungen verändern den Wert nicht: Sie sind über den betroffenen Stunden an den Balken markiert, damit du sie selbst einschätzen kannst.',
+        'Der Index bewertet von 0 bis 10, wie angenehm und sicher es im Fursuit draußen ist. Er gewichtet die Hitzebelastung aus der Feuchtkugeltemperatur und der Sonneneinstrahlung, zusammen mit Wind und Niederschlagsvorhersage. Die Feuchtkugeltemperatur ist eine Temperatur, den dein Körper durchs Schwitzen  minimal erreichen kann. Sie liegt unter der echten Lufttemperatur, und je näher beide beieinander liegen, desto weniger bringt das Schwitzen. Der Taupunkt ist eine eigene Größe und sagt, wie schwül sich die Luft anfühlt: ab etwa 15 °C wird es klamm. Amtliche Warnungen verändern den Wert nicht: Sie sind über den betroffenen Stunden an den Balken markiert, damit du sie selbst einschätzen kannst.',
       'fsi.weightsHeading': 'Wie sehen die Gewichtungen aus?',
       'fsi.weightsNote':
         'Über die Gewichtung hinaus gibt es weitere Grenzen, die den Index anpassen. Gefährliche Hitze (>36°C) setzt den Index bspw. auf 0.',
@@ -227,12 +215,11 @@ window.EFW_I18N = (function () {
       'warnings.advance': 'VORABINFORMATION',
       'warnings.advanceNote': 'Vorabinformation: mögliches Unwetter, noch keine amtliche Warnung.',
       'radar.heading': 'Regenradar',
-      'radar.showWarnings': 'Warngebiete anzeigen',
       'radar.updated': 'Radar aktualisiert',
       'radar.offline': 'Neuste Radarbilder können gerade nicht geladen werden.',
       'map.twoFinger': 'Karte mit zwei Fingern bewegen.',
 
-      'model.heading': 'Modellkarte des ICON (DWD)',
+      'model.heading': 'Modellkarte (COSMO)',
       'model.clouds': 'Bewölkung',
       'model.temperature': 'Temperatur',
       'model.wind': 'Wind',
@@ -246,37 +233,24 @@ window.EFW_I18N = (function () {
       'model.pause': 'Pause',
       'model.rain': 'Regen',
       'model.windNote': 'Pfeile zeigen die Windrichtung.',
-      'model.pollen': 'Pollen',
-      'model.daysAhead': '{n} Tage nach dem Modelllauf',
-      'model.today': 'heute',
-      'model.stepDay': 'Vorhersagetag',
 
-      'pollen.label': 'Allergie',
-      'pollen.none': 'Keine',
-      'pollen.hazel': 'Hasel',
       'pollen.alder': 'Erle',
       'pollen.birch': 'Birke',
       'pollen.grasses': 'Gräser',
       'pollen.ragweed': 'Ambrosia',
-      'pollen.offSeason': 'außerhalb der Saison',
-      'pollen.notInSeason':
-        '{species} hat gerade keine Saison. Der DWD veröffentlicht sie vom {start} bis {end}.',
-      'pollen.pick': 'Wähle oben eine Allergie, um die Vorhersage hier zu sehen.',
       'pollen.level.low': 'Gering',
       'pollen.level.moderate': 'Mäßig',
       'pollen.level.high': 'Hoch',
       'pollen.level.very_high': 'Sehr hoch',
-      'pollen.source': 'ICON-ART Tagesmittel, DWD.',
-      'pollen.caveat':
-        'Lediglich Forschungsdaten. Der DWD weist darauf hin, dass sie für klinische Zwecke nicht geeignet sind. Die Stufen gering/hoch stammen von dieser Seite.',
+
       'footer.updated': 'Aktualisiert',
-      'footer.mosmixRun': 'MOSMIX-Lauf',
+      'footer.forecastRun': 'Vorhersagelauf',
       'footer.data': 'Wetterdaten',
       'footer.mapData': 'Kartendaten',
       'footer.display': 'ConOps-Anzeige',
       'footer.api': 'Wetter-API',
       'footer.disclaimer':
-        'Offizielle Eurofurence-Seite. Befolge stets die amtlichen DWD-Warnungen, und für Ansagen der Convention den offiziellen Telegram-Kanal:',
+        'Offizielle Eurofurence-Seite. Befolge stets die amtlichen Warnungen, und für Ansagen der Convention den offiziellen Telegram-Kanal:',
       'footer.notifications': 'Eurofurence Notifications',
       'footer.builtBy': 'Gebaut von',
       'footer.source': 'github',
@@ -287,7 +261,7 @@ window.EFW_I18N = (function () {
       'footer.feedback': 'Feedback',
       'lang.label': 'Sprache',
       'display.allClear': 'Keine aktiven Warnungen',
-      'display.warnings': 'Aktive DWD-Warnungen',
+      'display.warnings': 'Aktive Warnungen',
       'display.next18': 'Nächste 18 Stunden',
     },
   };
@@ -296,9 +270,6 @@ window.EFW_I18N = (function () {
   const UNIT_KEY = 'efw.unit';
   const CLOCK_KEY = 'efw.clock';
   const WIND_KEY = 'efw.wind';
-  const ALLERGY_KEY = 'efw.allergy';
-
-  const ALLERGIES = ['hazel', 'alder', 'birch', 'grasses', 'ragweed'];
 
   /* Wind arrives in km/h and stays that way in the payload; this is only how it
      is written down. mph for the Americans, knots because a fair number of
@@ -363,25 +334,6 @@ window.EFW_I18N = (function () {
     localStorage.setItem(CLOCK_KEY, clock === '12' ? '12' : '24');
   }
 
-  function getAllergy() {
-    const asked = (params.get('allergy') || '').toLowerCase();
-    if (ALLERGIES.includes(asked)) return asked;
-    if (asked === 'none') return '';
-    const stored = localStorage.getItem(ALLERGY_KEY);
-    return ALLERGIES.includes(stored) ? stored : '';
-  }
-
-  function setAllergy(allergy) {
-    if (ALLERGIES.includes(allergy)) localStorage.setItem(ALLERGY_KEY, allergy);
-    else localStorage.removeItem(ALLERGY_KEY); // "none" is the absence of a setting
-
-    if (params.has('allergy')) {
-      params.delete('allergy');
-      const query = params.toString();
-      history.replaceState(null, '', `${location.pathname}${query ? `?${query}` : ''}`);
-    }
-  }
-
   /** Time-of-day options honouring the clock preference, plus anything extra. */
   function clockOptions(extra) {
     const half = getClock() === '12';
@@ -405,9 +357,9 @@ window.EFW_I18N = (function () {
   }
 
   /** A calendar date with no time of day.
-      For a figure that covers a whole day -- the pollen forecast is a daily
-      mean -- an hour on the label would be an invention, and "2 Aug, 02:00"
-      reads as a measurement taken at two in the morning. */
+      For a figure that covers a whole day, an hour on the label would be an
+      invention, and "2 Aug, 02:00" reads as a measurement taken at two in the
+      morning. */
   function dateOnly(value, extra) {
     return new Date(value).toLocaleDateString(locale(), {
       day: 'numeric',
@@ -485,9 +437,6 @@ window.EFW_I18N = (function () {
     setClock,
     getWind,
     setWind,
-    getAllergy,
-    setAllergy,
-    ALLERGIES,
     temp,
     wind,
     windUnit,

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Eurofurence Weather: API</title>
-  <meta name="description" content="Weather API for Eurofurence. Fursuiting Index, forecast, warnings and radar, built on DWD OpenData. By laffiesphere.">
+  <meta name="description" content="Weather API for Eurofurence. Fursuiting Index, forecast, warnings and radar, built on IMGW-PIB and Open-Meteo data. Forked from laffiesphere's original DWD-based version.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦊</text></svg>">
   <link rel="stylesheet" href="/style.css">
 </head>
@@ -15,8 +15,9 @@
     Weather API
   </h1>
   <p class="subtitle">
-    EF weather FSI api
-    <a href="https://opendata.dwd.de" rel="noopener">DWD OpenData</a>.
+    EF weather FSI api, built on
+    <a href="https://danepubliczne.imgw.pl/" rel="noopener">IMGW-PIB</a> and
+    <a href="https://open-meteo.com/" rel="noopener">Open-Meteo</a> data.
   </p>
 </header>
 
@@ -50,7 +51,7 @@
   "wetbulb_c": 16.8,
   "effective_wetbulb_c": 16.8,
   "subscores": [ … ],
-  "meta": { "station_id": "10147", "language": "en", … }
+  "meta": { "station_id": "12375", "language": "en", … }
 }</code></pre>
     <p class="note">
       This page is the short version. Full schemas live at <a href="/docs">/docs</a>,
@@ -97,7 +98,7 @@
           </tr>
           <tr>
             <td><a href="/api/v1/warnings"><code>/api/v1/warnings</code></a></td>
-            <td>Official DWD warnings and advance notices in force</td>
+            <td>Official IMGW warnings in force</td>
             <td>~2 kB</td>
           </tr>
           <tr>
@@ -124,7 +125,7 @@
     <ul class="docs-list">
       <li><code>station_id</code>, <code>location</code>, <code>latitude</code>/<code>longitude</code>, <code>timezone</code>: what was measured, and where</li>
       <li><code>generated_at</code>: ISO 8601 UTC</li>
-      <li><code>attribution</code>: the DWD credit you have to reproduce</li>
+      <li><code>attribution</code>: the source credit you have to reproduce</li>
       <li>
         <code>degraded</code>: sources that were unreachable for <em>this</em>
         response. We answer with what we have instead of failing, so
@@ -182,14 +183,15 @@
       yourself from <code>/api/v1/warnings</code>.
     </p>
     <p>
-      <code>advance: true</code> marks a <em>Vorabinformation</em>. That is DWD
-      flagging possible severe weather before it is certain enough to warn on, so
-      please do not show it as a warning in force. This site draws it with red
-      diagonal hatching.
+      <code>advance: true</code> marks a <em>Vorabinformation</em>: a source
+      flagging possible severe weather before it is certain enough to warn on,
+      drawn with red diagonal hatching rather than shown as a warning in force.
+      IMGW has no such tier, so this is always <code>false</code> for the
+      warnings this API serves -- not fabricated, just unsupported by the source.
     </p>
     <p class="note">
       <code>headline</code>, <code>description</code> and <code>instruction</code>
-      are DWD's official wording and are <strong>always German</strong>, whatever
+      are IMGW's official wording and are <strong>always Polish</strong>, whatever
       <code>lang</code> you ask for. Passing them through untouched is deliberate:
       translating official safety text is not ours to do. Only <code>label</code>
       is translated. Use <code>kind</code> and <code>severity</code> for logic.
@@ -217,11 +219,12 @@ X-RateLimit-Remaining: 97</code></pre>
     </p>
     <div class="table-scroll">
       <table class="docs-table">
-        <thead><tr><th>Source</th><th>DWD publishes</th><th>We cache</th></tr></thead>
+        <thead><tr><th>Source</th><th>Publishes</th><th>We cache</th></tr></thead>
         <tbody>
-          <tr><td>Station observations</td><td>hourly</td><td>10 min</td></tr>
-          <tr><td>MOSMIX point forecast</td><td>every ~6 h</td><td>30 min</td></tr>
-          <tr><td>Warnings</td><td>every few minutes</td><td>3 min</td></tr>
+          <tr><td>IMGW SYNOP observations</td><td>hourly</td><td>10 min</td></tr>
+          <tr><td>Open-Meteo forecast</td><td>every ~hour</td><td>30 min</td></tr>
+          <tr><td>IMGW warnings</td><td>every few minutes</td><td>3 min</td></tr>
+          <tr><td>IMGW POLRAD SRI radar</td><td>every ~5 min</td><td>4 min</td></tr>
         </tbody>
       </table>
     </div>
@@ -236,7 +239,7 @@ X-RateLimit-Remaining: 97</code></pre>
         <tbody>
           <tr><td><code>422</code></td><td>A parameter failed validation, e.g. <code>lang=fr</code>, <code>wind_unit=mps</code>, or <code>hours</code> outside 1…120</td></tr>
           <tr><td><code>429</code></td><td>Rate limited. The body has <code>retry_after_seconds</code></td></tr>
-          <tr><td><code>503</code></td><td>No usable DWD data at all right now</td></tr>
+          <tr><td><code>503</code></td><td>No usable weather data at all right now</td></tr>
         </tbody>
       </table>
     </div>
@@ -252,15 +255,25 @@ X-RateLimit-Remaining: 97</code></pre>
   <section class="card" id="terms">
     <h2>Attribution &amp; fair use</h2>
     <p>
-      All weather data comes from <strong>Deutscher Wetterdienst (DWD)</strong> and
-      is used under
-      <a href="https://www.dwd.de/DE/service/copyright/copyright_node.html" rel="noopener">GeoNutzV</a>.
-      If you republish it, <strong>credit DWD</strong>. The exact string is in
+      Observations, warnings and the POLRAD SRI radar composite come from
+      <strong>IMGW-PIB</strong> (Instytut Meteorologii i Gospodarki Wodnej –
+      Państwowy Instytut Badawczy). If you republish them, reproduce the exact
+      Polish credit strings, verbatim:
+    </p>
+    <blockquote class="attribution-quote">
+      <p lang="pl">Źródłem pochodzenia danych jest Instytut Meteorologii i Gospodarki Wodnej – Państwowy Instytut Badawczy</p>
+      <p lang="pl">Dane Instytutu Meteorologii i Gospodarki Wodnej – Państwowego Instytutu Badawczego zostały przetworzone</p>
+    </blockquote>
+    <p>
+      The forecast and pollen data come from <strong><a href="https://open-meteo.com/" rel="noopener">Open-Meteo</a></strong>,
+      used under <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>.
+      Open-Meteo's forecast is not an official IMGW forecast product and must not
+      be presented as one. The exact combined attribution string is in
       <code>meta.attribution</code> of every response.
     </p>
     <p>
-      This is the official Eurofurence weather site. It is not an official DWD
-      service, and the index is advice, not a safety certification:
+      This is the official Eurofurence weather site. It is not an official IMGW
+      or Open-Meteo service, and the index is advice, not a safety certification:
       <strong>heat exhaustion is real, and no number replaces your
       own judgement or a headless break.</strong> Please do not lean on it for
       decisions where being wrong matters.
@@ -281,8 +294,9 @@ X-RateLimit-Remaining: 97</code></pre>
     <a href="/display">ConOps display</a>
   </p>
   <p>
-    Weather data: <a href="https://opendata.dwd.de" rel="noopener">Deutscher Wetterdienst (DWD)</a>.
-    Built by <strong>laffiesphere</strong> ·
+    Weather data: <a href="https://danepubliczne.imgw.pl/" rel="noopener">IMGW-PIB</a> ·
+    <a href="https://open-meteo.com/" rel="noopener">Open-Meteo</a>.
+    Originally built by <strong>laffiesphere</strong> ·
     <a href="https://github.com/laffiesphere/EurofurenceWeather" rel="noopener">source</a>.
   </p>
 </footer>

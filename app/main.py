@@ -1,9 +1,8 @@
 """Eurofurence Weather -- FastAPI application entry point.
 
-Author: laffiesphere (https://github.com/laffiesphere/EurofurenceWeather)
-
-The official weather site for the convention. Weather data comes from
-Deutscher Wetterdienst OpenData and is used under GeoNutzV; see /api-docs for
+Originally by laffiesphere (https://github.com/laffiesphere/EurofurenceWeather),
+forked for a Polish venue. Weather data comes from IMGW-PIB (observations,
+warnings, POLRAD radar) and Open-Meteo (forecast, pollen); see /api-docs for
 the public API and the attribution it requires.
 """
 
@@ -17,10 +16,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import api_v1, presence, ratelimit, schemas, service
+from app import api_v1, net, presence, ratelimit, schemas, service
 from app.config import settings
-from app.dwd import icon, pollen, radar
-from app.dwd.client import cache
+from app.providers.http import cache, field_cache
+from app.providers.imgw import cosmo as imgw_cosmo
+from app.providers.imgw import observations as synop
+from app.providers.imgw.client import ProductNotFound
+from app.providers.imgw import radar as imgw_radar
+from app.providers.imgw import warnings as imgw_warnings
+from app.providers.open_meteo import forecast as open_meteo_forecast
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s: %(message)s"
@@ -35,20 +39,27 @@ app = FastAPI(
     version="2.1.0",
     description=(
         "Fursuiting index, weather overview and warnings for "
-        f"{settings.location.name}, built on DWD OpenData.\n\n"
+        f"{settings.location.name}, built on IMGW-PIB and Open-Meteo data.\n\n"
         "**Everything published here is JSON under `/api/v1`, and those shapes are "
         "a stable contract.** The map imagery this site draws for itself is not part "
         "of it: pictures are expensive to serve and trivial to abuse, so they are "
-        "not offered as an API. Radar and warning layers come from the DWD GeoServer "
-        "at `maps.dwd.de`, which serves them to anyone.\n\n"
+        "not offered as an API.\n\n"
         "Open access, no key. Please respect the rate limit in the `X-RateLimit-*` "
         "headers and cache responses — the upstream data only changes hourly.\n\n"
-        "Weather data © Deutscher Wetterdienst (DWD), used under GeoNutzV. "
-        "Attribute DWD if you republish it."
+        "Źródłem pochodzenia danych jest Instytut Meteorologii i Gospodarki Wodnej "
+        "– Państwowy Instytut Badawczy. Dane Instytutu Meteorologii i Gospodarki "
+        "Wodnej – Państwowego Instytutu Badawczego zostały przetworzone. "
+        "Forecast and pollen data © Open-Meteo, CC BY 4.0."
     ),
     contact={"name": "Project source", "url": "https://github.com/laffiesphere/EurofurenceWeather"},
     license_info={"name": "MIT"},
 )
+
+# Pin outbound requests to one IP family if the operator asked for it, and
+# warn early if IMGW/Open-Meteo turn out not to publish that family -- see
+# app/net.py. A no-op under the "auto" default.
+net.apply_ip_family(settings.network.ip_family)
+net.preflight()
 
 # Politeness ceiling for the open API; see app/ratelimit.py on worker scope.
 limiter = ratelimit.SlidingWindowLimiter(settings.api.rate_limit_per_minute)
@@ -102,8 +113,8 @@ def get_summary(
     """
     payload = service.build_summary(lang)
     if payload["current"] is None and not payload["daily"]:
-        raise HTTPException(status_code=503, detail="No DWD data available right now")
-    # Let a CDN or reverse proxy hold this briefly; DWD data is not second-fresh.
+        raise HTTPException(status_code=503, detail="No weather data available right now")
+    # Let a CDN or reverse proxy hold this briefly; upstream data is not second-fresh.
     return JSONResponse(payload, headers={"Cache-Control": "public, max-age=120"})
 
 
@@ -116,9 +127,17 @@ def get_summary(
 # machine on a home uplink. So none of them is in the schema or the docs. They
 # exist for this site's own map card, at the one size that card asks for.
 #
-# The radar proxy that used to sit here is gone: the map talks to the DWD
-# GeoServer directly, so it had no caller left, and DWD's WMS is public and far
-# better placed to serve it than we are.
+# Unlike DWD, IMGW has no public WMS a browser can be pointed at directly, so
+# this app renders the POLRAD SRI composite itself and serves the PNG below.
+#
+# COSMO 2.8km model-field maps (the old ICON-D2 clouds/temperature/wind card)
+# are decoded by app/providers/imgw/cosmo.py -- a real GRIB1 reader, not a
+# guess at the format; see that module's docstring for how its record table
+# and grid geometry were confirmed against a live file. A gridded pollen layer
+# is not implemented: Open-Meteo's pollen endpoint has no raster/gridded
+# product at all, only point values, and there is no Polish equivalent of
+# DWD's ICON-ART pollen maps to draw -- that endpoint stays a 404 rather than
+# silently falling back to DWD's.
 
 #: The model card's map is far wider than it is tall, so the field is cut to a
 #: matching shape -- otherwise it fits the height and leaves empty side margins.
@@ -130,50 +149,78 @@ MODEL_ASPECT = 2.3
 MAX_IMAGE_WIDTH = 900
 
 
-def _model_bbox(span: float) -> tuple:
-    return radar.bbox_around(
-        settings.location.latitude, settings.location.longitude, span, aspect=MODEL_ASPECT
+def _model_bbox(span: float, aspect: float = 1.0) -> tuple:
+    return imgw_radar.bbox_around(
+        settings.location.latitude, settings.location.longitude, span, aspect=aspect
     )
 
 
-@app.get("/api/model", include_in_schema=False)
-def get_model_info(span: float = Query(1.6, ge=0.2, le=4.0)) -> JSONResponse:
-    """Which ICON fields exist and which run they are from. Feeds the map card."""
-    bbox = _model_bbox(span)
-    payload = icon.describe_parameters(bbox)
-
-    # Pollen rides alongside the ICON fields rather than among them: it is a
-    # different model on a different grid in daily steps, and folding it into
-    # `parameters` would have every consumer assume those hold for it too.
-    if settings.pollen.enabled:
-        try:
-            payload["pollen"] = pollen.describe(bbox)
-        except Exception as exc:  # noqa: BLE001 - one absent layer, not a dead card
-            logger.error("Pollen metadata unavailable: %s", exc)
-
-    return JSONResponse(payload, headers={"Cache-Control": "public, max-age=600"})
-
-
-@app.get("/api/model.png", include_in_schema=False)
-def get_model_image(
-    param: str = Query("clouds", pattern="^(clouds|temperature|wind)$"),
-    step: int = Query(0, ge=0, le=icon.MAX_STEP, description="Forecast hour from the model run"),
+@app.get("/api/radar.png", include_in_schema=False)
+def get_radar_image(
     span: float = Query(1.6, ge=0.2, le=4.0),
     width: int = Query(720, ge=100, le=MAX_IMAGE_WIDTH),
 ) -> Response:
-    """One ICON-D2 field as a map overlay, for this site's model card."""
+    """The POLRAD SRI precipitation-rate composite as a map overlay."""
+    bbox = _model_bbox(span)
+    height = int(round(width * (bbox[2] - bbox[0]) / (bbox[3] - bbox[1])))
     try:
-        result = icon.render(param, step, _model_bbox(span), width)
+        result = imgw_radar.render(bbox, width, height)
     except Exception as exc:  # noqa: BLE001
-        logger.error("ICON render failed for %s +%dh: %s", param, step, exc)
-        raise HTTPException(status_code=502, detail="ICON model data unavailable") from exc
+        logger.error("POLRAD SRI render failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Radar data unavailable") from exc
+
+    if result is None:
+        # Frame missing or stale -- an answer, not a fault. See
+        # app/providers/imgw/radar.py: this must never draw a fabricated frame.
+        raise HTTPException(status_code=404, detail="No fresh POLRAD SRI frame available")
 
     return Response(
         content=result["png"],
         media_type="image/png",
         headers={
-            "Cache-Control": "public, max-age=1800",
+            "Cache-Control": "public, max-age=240",
+            "X-Valid-Time": result["valid"].isoformat(),
+            "X-Value-Min": "" if result["min"] is None else f"{result['min']:.1f}",
+            "X-Value-Max": "" if result["max"] is None else f"{result['max']:.1f}",
+        },
+    )
+
+
+@app.get("/api/model", include_in_schema=False)
+def get_model_info(span: float = Query(2.0, ge=0.5, le=4.0)) -> JSONResponse:
+    """Model-field metadata for the map card: fields, ranges, run time, bbox."""
+    bbox = _model_bbox(span, aspect=MODEL_ASPECT)
+    return JSONResponse(imgw_cosmo.describe_parameters(bbox))
+
+
+@app.get("/api/model.png", include_in_schema=False)
+def get_model_image(
+    param: str = Query(...),
+    step: int = Query(0, ge=0, le=imgw_cosmo.MAX_STEP),
+    span: float = Query(2.0, ge=0.5, le=4.0),
+    width: int = Query(720, ge=100, le=MAX_IMAGE_WIDTH),
+) -> Response:
+    """One COSMO field as a map overlay, at a given forecast step."""
+    if param not in imgw_cosmo.PARAMETERS:
+        raise HTTPException(status_code=422, detail=f"Unknown model parameter {param!r}")
+
+    bbox = _model_bbox(span, aspect=MODEL_ASPECT)
+    try:
+        result = imgw_cosmo.render(param, step, bbox, width)
+    except ProductNotFound as exc:
+        # The step this run hasn't published yet -- an answer, not a fault.
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.error("COSMO render failed (param=%s step=%s): %s", param, step, exc)
+        raise HTTPException(status_code=502, detail="Model data unavailable") from exc
+
+    return Response(
+        content=result["png"],
+        media_type="image/png",
+        headers={
+            "Cache-Control": "public, max-age=900",
             "X-Model-Run": result["run"].isoformat(),
+            "X-Valid-Time": result["valid"].isoformat(),
             "X-Value-Min": "" if result["min"] is None else f"{result['min']:.1f}",
             "X-Value-Max": "" if result["max"] is None else f"{result['max']:.1f}",
         },
@@ -181,40 +228,14 @@ def get_model_image(
 
 
 @app.get("/api/pollen.png", include_in_schema=False)
-def get_pollen_image(
-    species: str = Query("grasses", pattern="^(hazel|alder|birch|grasses|ragweed)$"),
-    step: int = Query(0, ge=0, le=pollen.MAX_STEP, description="Forecast day from the run"),
-    span: float = Query(1.6, ge=0.2, le=4.0),
-    width: int = Query(720, ge=100, le=MAX_IMAGE_WIDTH),
-) -> Response:
-    """One ICON-ART pollen field as a map overlay.
+def get_pollen_image() -> Response:
+    """A gridded pollen layer. Not implemented yet.
 
-    A species outside its own season answers 404: DWD publishes nothing for it,
-    which is an answer rather than a fault.
+    Open-Meteo's CAMS-backed pollen endpoint (app/providers/open_meteo/pollen.py)
+    only offers point values, not a raster grid to render -- there is no
+    Polish/CAMS equivalent of DWD's ICON-ART pollen maps to draw here.
     """
-    if not settings.pollen.enabled:
-        raise HTTPException(status_code=404, detail="Pollen layer is switched off")
-    try:
-        result = pollen.render(species, step, _model_bbox(span), width)
-    except LookupError as exc:
-        # Out of season. Not an error anyone can fix, and not a 502: the
-        # frontend turns this into "DWD publishes birch from 30 Jan".
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Pollen render failed for %s +%dd: %s", species, step, exc)
-        raise HTTPException(status_code=502, detail="Pollen forecast unavailable") from exc
-
-    return Response(
-        content=result["png"],
-        media_type="image/png",
-        headers={
-            "Cache-Control": "public, max-age=3600",
-            "X-Model-Run": result["run"].isoformat(),
-            "X-Valid-Time": result["valid"].isoformat(),
-            "X-Value-Min": "" if result["min"] is None else f"{result['min']:.1f}",
-            "X-Value-Max": "" if result["max"] is None else f"{result['max']:.1f}",
-        },
-    )
+    raise HTTPException(status_code=404, detail="Gridded pollen data is not available")
 
 
 @app.get(
@@ -239,18 +260,19 @@ def health() -> dict:
     return {
         "status": "ok",
         "event": settings.event.name,
-        "station": settings.dwd.station_id,
+        "station": settings.imgw.station_id,
         "location": settings.location.name,
         "cache_age_seconds": {
-            "observations": _age(f"poi:{settings.dwd.station_id}"),
-            "forecast": _age(f"mosmix:{settings.dwd.station_id}:{settings.forecast_hours}"),
-            "warnings": _age(f"warnings:{','.join(settings.dwd.warncells)}"),
+            "observations": _age(synop.cache_key()),
+            "forecast": _age(open_meteo_forecast.cache_key()),
+            "warnings": _age(imgw_warnings.CACHE_KEY),
+            "radar": _age(imgw_radar.CACHE_KEY, field_cache),
         },
     }
 
 
-def _age(key: str):
-    age = cache.age(key)
+def _age(key: str, source=cache):
+    age = source.age(key)
     return None if age is None else int(age)
 
 

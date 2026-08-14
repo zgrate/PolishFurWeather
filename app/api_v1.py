@@ -28,8 +28,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["Public API v1"])
 
-#: Browser and CDN caching. DWD observations are hourly and the forecast is
-#: four times a day, so a couple of minutes costs a consumer nothing.
+#: Browser and CDN caching. IMGW SYNOP observations are hourly and the
+#: forecast changes on a similar cadence, so a couple of minutes costs a
+#: consumer nothing.
 CACHE_SECONDS = 120
 
 LanguageQuery = Query("en", pattern="^(en|de)$", description="Language for generated text")
@@ -76,7 +77,7 @@ def _summary(lang: str) -> Dict[str, Any]:
     """Fetch the internal payload, or fail loudly if every source is down."""
     payload = service.build_summary(lang)
     if payload["current"] is None and not payload["daily"]:
-        raise HTTPException(status_code=503, detail="No DWD data available right now")
+        raise HTTPException(status_code=503, detail="No weather data available right now")
     return payload
 
 
@@ -302,7 +303,8 @@ def get_fsi(response: Response, lang: str = LanguageQuery) -> schemas.FsiNow:
     response_model=schemas.CurrentConditions,
     responses=RESPONSES,
     summary="Current observed conditions",
-    description="The latest hourly surface observation from the DWD station.",
+    description="The latest surface observation from the venue's IMGW SYNOP station, "
+    "with precipitation intensity from IMGW's POLRAD SRI radar composite.",
     **LEAN,
 )
 def get_current(
@@ -357,8 +359,8 @@ def get_daily(
     "/warnings",
     response_model=schemas.Warnings,
     responses=RESPONSES,
-    summary="Active official DWD warnings",
-    description="Warning wording is published by DWD in German only and is passed "
+    summary="Active official IMGW warnings",
+    description="Warning wording is published by IMGW in Polish only and is passed "
     "through verbatim; only the heading is translated. Warnings are reported "
     "alongside the index and do not alter its score -- combine them yourself if "
     "your use case needs that.",

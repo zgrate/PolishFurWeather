@@ -3,7 +3,7 @@ FROM ${BASE_IMAGE}
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    TZ=Europe/Berlin
+    TZ=Europe/Warsaw
 
 WORKDIR /app
 

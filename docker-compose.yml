@@ -12,13 +12,18 @@ services:
       - "8000:8000"
     mem_limit: 1g
     environment:
-      EFW_STATION_ID: "10147"          # Hamburg-Fuhlsbuettel
-      EFW_WARNCELLS: "102000000"       # Hansestadt Hamburg
-      EFW_LOCATION_NAME: "Hamburg"
+      # Required: this venue's IMGW SYNOP station and powiat TERYT code(s).
+      # Left blank on purpose -- see app/config.py's IMGWSettings docstring
+      # for where to look these up. The app starts without them but
+      # observations/warnings stay unavailable until they are set.
+      EFW_IMGW_STATION_ID: ""          # e.g. "12500" (Krakow-Balice)
+      EFW_IMGW_STATION_NAME: ""        # e.g. "Krakow-Balice"
+      EFW_IMGW_TERYT: ""               # comma-separated powiat TERYT code(s)
+      EFW_LOCATION_NAME: ""            # venue city, shown in the UI
       EFW_FORECAST_HOURS: "120"
       EFW_BUSY_AT: "40"
       EFW_CROWDED_AT: "80"
-      TZ: "Europe/Berlin"
+      TZ: "Europe/Warsaw"
     logging:
       driver: json-file
       options:

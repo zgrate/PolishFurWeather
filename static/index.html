@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Eurofurence Weather: Main page</title>
-  <meta name="description" content="Fursuiting index, weather overview and rain radar for the EF30: in Hamburg, from DWD OpenData.">
+  <meta name="description" content="Fursuiting index, weather overview and rain radar, built on IMGW-PIB and Open-Meteo data.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦊</text></svg>">
   <link rel="stylesheet" href="/vendor/leaflet.css">
   <link rel="stylesheet" href="/style.css">
@@ -36,28 +36,6 @@
       <button type="button" data-lang="en">EN</button>
       <button type="button" data-lang="de">DE</button>
     </div>
-    <!-- Which pollen the reader reacts to. Options are filled in from
-         /api/model, which knows the seasons: a species DWD is not publishing
-         today is still listed, but marked, rather than quietly missing.
-
-         The emoji stands in for the word "Allergy": the label cost more width
-         than the menu it named. It is decoration, so it is hidden from anything
-         that reads rather than looks, and the real word is carried alongside it
-         where only a screen reader will find it. -->
-    <label class="allergy-switch" id="allergy-switch" hidden>
-      <span class="icon" aria-hidden="true">🤧</span>
-      <span class="visually-hidden" data-i18n="pollen.label">Allergy</span>
-      <!-- The species on show is written by the sizer, not by the select, which
-           is stretched over the whole pill invisibly: a native menu is as wide as
-           its widest option, so left to itself the pill stayed sized for the
-           longest species even when the short one was chosen -- and a <select>
-           only opens from its own box, so anything the box did not cover (the
-           emoji, the arrow) was dead to a click in Chromium. -->
-      <span class="field">
-        <span class="sizer" id="allergy-sizer" aria-hidden="true"></span>
-        <select id="allergy-select"></select>
-      </span>
-    </label>
   </div>
   <p class="subtitle" id="subtitle">Loading…</p>
 </header>
@@ -141,7 +119,6 @@
     <h2 id="radar-heading" data-i18n="radar.heading">Rain radar</h2>
     <div id="map" class="map"></div>
     <p class="radar-controls">
-      <label><input type="checkbox" id="toggle-warnings"> <span data-i18n="radar.showWarnings">Show warning areas</span></label>
       <span class="radar-status" id="radar-status"></span>
     </p>
   </section>
@@ -152,9 +129,9 @@
     <video id="egg-video" src="/media/ravi_67.mp4" autoplay muted loop playsinline></video>
   </section>
 
-  <!-- ICON model maps -->
+  <!-- COSMO model maps -->
   <section class="card" aria-labelledby="model-heading">
-    <h2 id="model-heading" data-i18n="model.heading">Model maps (ICON)</h2>
+    <h2 id="model-heading" data-i18n="model.heading">Model maps (COSMO)</h2>
     <div class="model-tabs" id="model-tabs" role="tablist"></div>
     <div class="model-figure">
       <div id="model-map" class="map"></div>
@@ -214,7 +191,8 @@
   <p id="footer-meta"></p>
   <p>
     <span data-i18n="footer.data">Weather data</span>:
-    <a href="https://opendata.dwd.de" rel="noopener">Deutscher Wetterdienst (DWD)</a>.
+    <a href="https://danepubliczne.imgw.pl/" rel="noopener">IMGW-PIB</a> ·
+    <a href="https://open-meteo.com/" rel="noopener">Open-Meteo</a>.
     <span data-i18n="footer.mapData">Map data</span> ©
     <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a>, © CARTO.
     · <a href="/display" data-i18n="footer.display">ConOps display</a>

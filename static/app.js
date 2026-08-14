@@ -2,7 +2,6 @@
    Author: laffiesphere. */
 
 const REFRESH_MS = 5 * 60 * 1000;
-const DWD_WMS = 'https://maps.dwd.de/geoserver/dwd/wms';
 
 const $ = (id) => document.getElementById(id);
 const T = (key, vars) => EFW_I18N.T(key, vars);
@@ -109,7 +108,7 @@ function warningCard(warning) {
     if (!value) continue;
     const paragraph = document.createElement('p');
     if (className) paragraph.className = className;
-    paragraph.lang = 'de';
+    paragraph.lang = 'pl';
     paragraph.textContent = value;
     article.append(paragraph);
   }
@@ -149,11 +148,12 @@ function renderFSI(data) {
   text($('fsi-advice'), fsi.advice);
 
   /* The headline is scored from the station report -- the same reading "Right
-     now" shows -- while the bars underneath are MOSMIX. The two disagree now
-     and then, and calling a measurement a "forecast hour" made that read as a
-     contradiction rather than as two different things. Say which this one is.
-     The station report does go missing, and then this number does come from the
-     forecast, so the wording follows the source rather than assuming. */
+     now" shows -- while the bars underneath are the Open-Meteo forecast. The
+     two disagree now and then, and calling a measurement a "forecast hour"
+     made that read as a contradiction rather than as two different things.
+     Say which this one is. The station report does go missing, and then this
+     number does come from the forecast, so the wording follows the source
+     rather than assuming. */
   const observed = data.current ? data.current.time_local : null;
   const measured = data.current && data.current.source === 'poi';
   const when = T(measured ? 'fsi.measured' : 'fsi.hour');
@@ -416,11 +416,11 @@ function renderNow(current, fsi, place) {
      heading rather than in small print underneath it: "Right now" is only true
      of somewhere, at some time.
 
-     The station name is the operator's, falling back to the one DWD publishes
-     with the forecast, which is abbreviated ("HAMBURG-FU."). The word "measured"
-     is dropped when the reading is not one: with the station report missing
-     these come from MOSMIX and the hour is a forecast. Same two words as the
-     index panel, which is making the same distinction about the same reading. */
+     The station name is the operator's own IMGW SYNOP station. The word
+     "measured" is dropped when the reading is not one: with the station report
+     missing these come from the Open-Meteo forecast and the hour is a forecast.
+     Same two words as the index panel, which is making the same distinction
+     about the same reading. */
   const source = $('now-source');
   if (source) {
     const station = (place && place.station_name) || '';
@@ -736,9 +736,9 @@ function renderDays(days) {
 
 let map = null;
 let radarLayer = null;
-let warningLayer = null;
 let baseLayer = null;
 let radarMeter = null;
+let radarBounds = null; // which rectangle the overlay is currently hung on
 
 /* The festival palette is dark, so the maps always use the dark basemap. */
 const BASEMAP_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
@@ -780,28 +780,7 @@ function initMap(data) {
     subdomains: 'abcd',
     attribution: '© OpenStreetMap, © CARTO',
   }).addTo(map);
-
-  radarLayer = L.tileLayer
-    .wms(DWD_WMS, {
-      layers: data.radar.layer,
-      format: 'image/png',
-      transparent: true,
-      version: '1.3.0',
-      opacity: 0.75,
-      attribution: 'Radar © DWD',
-    })
-    .addTo(map);
-
-  radarMeter?.follow(baseLayer).follow(radarLayer);
-
-  warningLayer = L.tileLayer.wms(DWD_WMS, {
-    layers: 'dwd:Warnungen_Gemeinden',
-    format: 'image/png',
-    transparent: true,
-    version: '1.3.0',
-    opacity: 0.45,
-    attribution: 'Warnings © DWD',
-  });
+  radarMeter?.follow(baseLayer);
 
   L.circleMarker([latitude, longitude], {
     radius: 6,
@@ -812,43 +791,68 @@ function initMap(data) {
   })
     .addTo(map)
     .bindPopup(data.location.name);
-
-  radarMeter?.follow(warningLayer);
-
-  $('toggle-warnings').addEventListener('change', (event) => {
-    if (event.target.checked) warningLayer.addTo(map);
-    else map.removeLayer(warningLayer);
-  });
-
 }
 
 /* One cache-buster per radar cycle, shared by everyone, rather than one per tab
-   per refresh: Date.now() made every visitor's tiles a unique URL to DWD, so no
-   browser, proxy or tile cache between here and maps.dwd.de could serve any of
-   them twice. The composite only changes every refresh_seconds anyway. */
+   per refresh: Date.now() made every visitor's request a unique URL, so no
+   browser or proxy between here and the server could serve any of them twice.
+   The composite only changes every refresh_seconds anyway. */
 function radarStamp() {
   const seconds = (latest && latest.radar && latest.radar.refresh_seconds) || 240;
   return Math.floor(Date.now() / (seconds * 1000));
 }
 
+/* POLRAD SRI is one composite image, not a tile set: unlike the old DWD radar
+   WMS, /api/radar.png hands back a single PNG for a bbox, so the map holds one
+   image overlay pinned to that rectangle instead of a tile layer. IMGW has no
+   public warning-area layer to match DWD's, so there is nothing to overlay for
+   warnings here -- see /api/v1/warnings for those instead. */
 function refreshRadar() {
-  // Offline the tiles cannot arrive at all, and stamping the current time on a
-  // map that never reloaded is the one lie this line could tell.
+  // Offline no fresh frame can arrive at all, and stamping the current time on
+  // a map that never reloaded is the one lie this line could tell.
   if (offlineCopyAt) {
     text($('radar-status'), T('radar.offline'));
     return;
   }
-  const stamp = radarStamp();
-  if (radarLayer) radarLayer.setParams({ _t: stamp });
-  if (warningLayer) warningLayer.setParams({ _t: stamp });
+
+  const radar = latest?.radar;
+  if (!radar || !radar.available) {
+    if (radarLayer) {
+      map?.removeLayer(radarLayer);
+      radarLayer = null;
+      radarBounds = null;
+    }
+    text($('radar-status'), T('radar.offline'));
+    return;
+  }
+
+  const box = radar.bbox;
+  const bounds = [
+    [box.min_lat, box.min_lon],
+    [box.max_lat, box.max_lon],
+  ];
+  const url = `${radar.image_url}?_t=${radarStamp()}`;
+
+  if (radarLayer) {
+    if (String(bounds) !== String(radarBounds)) radarLayer.setBounds(bounds);
+    radarLayer.setUrl(url);
+  } else if (map) {
+    radarLayer = L.imageOverlay(url, bounds, {
+      opacity: 0.75,
+      interactive: false,
+      attribution: 'Radar © IMGW-PIB',
+    }).addTo(map);
+  }
+  radarBounds = bounds;
+
   text($('radar-status'), `${T('radar.updated')} ${EFW_I18N.time(new Date())}`);
 }
 
 /* ------------------------------------------------------------ model card */
 
-/* The ICON-D2 fields. Pollen joins them as a fourth tab, but only once the
-   reader has named an allergy -- see modelParams(). */
-const ICON_PARAMS = ['clouds', 'temperature', 'wind'];
+/* The COSMO 2.8km fields. Poland has no gridded pollen product to match DWD's
+   ICON-ART, so unlike the old site this card has no pollen tab. */
+const MODEL_PARAMS = ['clouds', 'temperature', 'wind'];
 /* How long a frame stays up once it has actually arrived. Each step is a
    separate GRIB file the server may still be fetching, so the timer starts on
    the image's load event rather than blindly -- otherwise the first run through
@@ -869,117 +873,20 @@ let modelTimer = null;
 let modelFailedStep = null; // retried once, not in a loop
 let modelBounds = null; // which rectangle the overlay is currently hung on
 
-/* ------------------------------------------------- pollen (one tab of it) */
+const modelParams = () => MODEL_PARAMS;
 
-/** The chosen species, or '' when pollen is off or unavailable. */
-function pollenSpecies() {
-  if (!modelInfo?.pollen) return '';
-  const chosen = EFW_I18N.getAllergy();
-  return modelInfo.pollen.species?.[chosen] ? chosen : '';
-}
-
-function pollenMeta() {
-  const species = pollenSpecies();
-  return species ? modelInfo.pollen.species[species] : null;
-}
-
-/** Tabs on the model card: the ICON fields, plus pollen once one is chosen. */
-function modelParams() {
-  return pollenSpecies() ? [...ICON_PARAMS, 'pollen'] : ICON_PARAMS;
-}
-
-const isPollen = () => modelParam === 'pollen';
-
-/**
- * What the current tab is drawn from.
- *
- * Pollen is a different model on a different grid in daily rather than hourly
- * steps, so every one of these has to be asked per tab instead of read off the
- * card once. Answering them in one place keeps that from leaking into every
- * caller.
- */
+/** What the current tab is drawn from. */
 function modelMeta() {
-  if (!isPollen()) return modelInfo?.parameters?.[modelParam] ?? null;
-  const meta = pollenMeta();
-  if (!meta) return null;
-  // Shaped like an ICON parameter so the legend renderer needs no special case.
-  // The API names the levels in its own vocabulary ("very_high"); only the
-  // frontend knows the reader's language, so they are translated here.
-  return {
-    unit: modelInfo.pollen.unit,
-    bands: meta.bands.map((band) => ({
-      ...band,
-      label: T(`pollen.level.${band.label}`),
-      // The top band is open-ended, and printing its invented upper edge in the
-      // tooltip would claim a ceiling the data does not have.
-      to: band.open ? null : band.to,
-    })),
-  };
+  return modelInfo?.parameters?.[modelParam] ?? null;
 }
 
-const modelMaxStep = () =>
-  (isPollen() ? modelInfo?.pollen?.max_step : modelInfo?.max_step) ?? 24;
-
-const modelStepHours = () => (isPollen() ? modelInfo?.pollen?.step_hours ?? 24 : 1);
-
-const modelRun = () => (isPollen() ? modelInfo?.pollen?.run : modelInfo?.run) || null;
-
-const modelViewBox = () => (isPollen() ? modelInfo?.pollen?.bbox : modelInfo?.bbox) ?? null;
-
-/** True when the chosen species has no season today, so there is nothing to draw. */
-const pollenOffSeason = () => isPollen() && pollenMeta()?.in_season === false;
+const modelMaxStep = () => modelInfo?.max_step ?? 24;
+const modelStepHours = () => 1;
+const modelRun = () => modelInfo?.run || null;
+const modelViewBox = () => modelInfo?.bbox ?? null;
 
 function modelImageUrl(step) {
-  return isPollen()
-    ? `/api/pollen.png?species=${pollenSpecies()}&step=${step}&width=720`
-    : `/api/model.png?param=${modelParam}&step=${step}&width=720`;
-}
-
-/** The allergy picker beside the language buttons. */
-function buildAllergySwitch() {
-  const host = $('allergy-switch');
-  const select = $('allergy-select');
-  if (!host || !select || !modelInfo?.pollen) return;
-
-  const chosen = EFW_I18N.getAllergy();
-  select.innerHTML = '';
-  for (const key of ['', ...EFW_I18N.ALLERGIES]) {
-    const option = document.createElement('option');
-    option.value = key;
-    // Out-of-season species stay on the list, marked. Dropping them would make
-    // the menu change shape through the year with no explanation, and "birch is
-    // not published in August" is a better answer than a missing entry.
-    const meta = key && modelInfo.pollen.species?.[key];
-    const suffix = meta && !meta.in_season ? ` (${T('pollen.offSeason')})` : '';
-    option.textContent = key ? `${T(`pollen.${key}`)}${suffix}` : T('pollen.none');
-    option.selected = key === chosen;
-    select.append(option);
-  }
-  host.hidden = false;
-  sizeAllergySwitch();
-}
-
-/** Write the species on show into the pill -- the select over it is invisible,
- *  so this span is both the text and the width. See .allergy-switch in the
- *  stylesheet. Wanted after every rebuild (the language changes the words) and
- *  after every choice. */
-function sizeAllergySwitch() {
-  const select = $('allergy-select');
-  const sizer = $('allergy-sizer');
-  if (!select || !sizer) return;
-  sizer.textContent = select.options[select.selectedIndex]?.textContent ?? '';
-}
-
-function onAllergyChange() {
-  EFW_I18N.setAllergy($('allergy-select').value);
-  sizeAllergySwitch();
-  // The pollen tab appears or disappears with the choice, and a card sitting on
-  // it when it goes has to fall back rather than keep requesting a dead layer.
-  if (isPollen() && !pollenSpecies()) modelParam = 'clouds';
-  else if (pollenSpecies()) modelParam = 'pollen'; // choosing one means wanting to see it
-  buildModelTabs();
-  buildModelHours();
-  updateModel();
+  return `/api/model.png?param=${modelParam}&step=${step}&width=720`;
 }
 
 /**
@@ -1075,9 +982,7 @@ function buildModelTabs() {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.param = key;
-    // The pollen tab names the species, not the word "pollen": with a picker
-    // above choosing between five of them, "Pollen" alone would not say which.
-    button.textContent = key === 'pollen' ? T(`pollen.${pollenSpecies()}`) : T(`model.${key}`);
+    button.textContent = T(`model.${key}`);
     button.setAttribute('role', 'tab');
     // Set here as well as in updateModel: the tabs are rebuilt on a language
     // switch, and the new buttons would otherwise come up with none marked.
@@ -1096,9 +1001,6 @@ function buildModelTabs() {
 }
 
 function setUpModel() {
-  buildAllergySwitch();
-  $('allergy-select')?.addEventListener('change', onAllergyChange);
-
   // Pinnable like the language and unit switches, so a link can open on the
   // field it is talking about.
   const asked = new URLSearchParams(location.search).get('model');
@@ -1119,20 +1021,16 @@ function setUpModel() {
   updateModel();
 }
 
-/* A step is an hour on the ICON tabs and a day on the pollen one, so both the
-   label and the tooltip have to follow the tab rather than be fixed. */
-const stepLabel = (step) =>
-  step === 0 ? T(isPollen() ? 'model.today' : 'model.now') : `+${step}${isPollen() ? ' d' : ''}`;
+const stepLabel = (step) => (step === 0 ? T('model.now') : `+${step}`);
 
-const stepTitle = (step) =>
-  T(isPollen() ? 'model.daysAhead' : 'model.hoursAhead', { n: step });
+const stepTitle = (step) => T('model.hoursAhead', { n: step });
 
 /** One button per forecast step: "now" and then +1, +2, +3 … */
 function buildModelHours() {
   const host = $('model-hours');
   if (!host) return;
   host.innerHTML = '';
-  host.setAttribute('aria-label', T(isPollen() ? 'model.stepDay' : 'model.step'));
+  host.setAttribute('aria-label', T('model.step'));
   for (let step = 0; step <= modelMaxStep(); step++) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -1214,7 +1112,8 @@ function onModelFrameFailed() {
   }
 
   // Standing still on a broken frame used to look like nothing was happening
-  // at all. Say so, and give it one more go -- these are usually a DWD hiccup.
+  // at all. Say so, and give it one more go -- these are usually a transient
+  // upstream hiccup.
   text($('model-status'), T('model.unavailable'));
   if (modelFailedStep === modelStep) return;
   modelFailedStep = modelStep;
@@ -1245,29 +1144,6 @@ function updateModel() {
 
   ensureModelMap();
 
-  // A species out of its season has no file behind it at all, so asking for one
-  // would be a guaranteed 404. Say which months it does cover instead.
-  if (pollenOffSeason()) {
-    stopModelPlay();
-    if (modelOverlay) {
-      modelMap?.removeLayer(modelOverlay);
-      modelOverlay = null;
-      modelBounds = null;
-    }
-    const meta = pollenMeta();
-    const asDate = (iso) => EFW_I18N.dateOnly(EFW_I18N.dayStart(iso), { month: 'long' });
-    text(
-      $('model-status'),
-      T('pollen.notInSeason', {
-        species: T(`pollen.${pollenSpecies()}`),
-        start: asDate(meta.season.start),
-        end: asDate(meta.season.end),
-      })
-    );
-    renderModelLegend();
-    return;
-  }
-
   const url = modelImageUrl(step);
   const box = modelViewBox();
   const bounds = box && [
@@ -1277,9 +1153,6 @@ function updateModel() {
 
   if (modelOverlay) {
     modelMeter?.expect();
-    // The pollen grid covers Germany only, so it hangs on a different rectangle
-    // from the ICON fields. Moving the image without moving its frame would
-    // stretch one model's field across the other's ground.
     if (bounds && String(bounds) !== String(modelBounds)) modelOverlay.setBounds(bounds);
     modelOverlay.setUrl(url);
   } else if (modelMap && bounds) {
@@ -1289,8 +1162,8 @@ function updateModel() {
       interactive: false,
     }).addTo(modelMap);
     modelOverlay.on('load', onModelFrame);
-    // A step DWD has not published yet answers 502. Say so, and when playing
-    // skip on to the next one rather than stalling the animation there.
+    // A step the model has not published yet answers with an error. Say so,
+    // and when playing skip on to the next one rather than stalling there.
     modelOverlay.on('error', onModelFrameFailed);
   }
   modelBounds = bounds;
@@ -1301,19 +1174,15 @@ function updateModel() {
     modelTimer = setTimeout(advanceModel, MODEL_FRAME_TIMEOUT_MS);
   }
 
-  // The pollen run is a bare date, so it is read as local noon; an ICON run is
-  // a full timestamp and keeps its hour.
   const run = modelRun() ? EFW_I18N.dayStart(modelRun()) : null;
   const valid = run
     ? new Date(run.getTime() + step * modelStepHours() * 3600 * 1000)
     : null;
-  // A daily mean names a day and nothing finer; an hourly field names the hour.
-  const stamp = isPollen() ? EFW_I18N.dateOnly : EFW_I18N.dateTime;
   text(
     $('model-status'),
     [
-      run ? `${T('model.run')} ${stamp(run, { day: 'numeric', month: 'short' })}` : '',
-      valid ? `→ ${stamp(valid, { weekday: 'short' })}` : '',
+      run ? `${T('model.run')} ${EFW_I18N.dateTime(run, { day: 'numeric', month: 'short' })}` : '',
+      valid ? `→ ${EFW_I18N.dateTime(valid, { weekday: 'short' })}` : '',
     ]
       .filter(Boolean)
       .join(' ')
@@ -1321,7 +1190,7 @@ function updateModel() {
 
   // The key describes the field, not the step: rebuilding it on every frame of
   // the animation would be churn for nothing.
-  if (legendParam !== modelParam + pollenSpecies()) renderModelLegend();
+  if (legendParam !== modelParam) renderModelLegend();
 }
 
 let legendParam = null; // which field the key on screen describes
@@ -1334,21 +1203,8 @@ function renderModelLegend() {
   // leave legendParam unset so updateModel still builds it when the data lands.
   if (!host || !meta) return;
 
-  legendParam = modelParam + pollenSpecies();
+  legendParam = modelParam;
   host.innerHTML = '';
-
-  if (isPollen()) {
-    // Out of season there is no field and so no scale, but the caveat below
-    // still belongs on screen -- it is about the product, not about today.
-    if (meta && !pollenOffSeason()) {
-      host.append(scaleRow(T(`pollen.${pollenSpecies()}`), meta, false));
-    }
-    const note = document.createElement('div');
-    note.className = 'note';
-    note.textContent = `${T('pollen.source')} ${T('pollen.caveat')}`;
-    host.append(note);
-    return;
-  }
 
   host.append(scaleRow(T(`model.${modelParam}`), meta, modelParam === 'temperature'));
 
@@ -1402,8 +1258,8 @@ function scaleRow(name, meta, isTemperature) {
     for (const band of meta.bands) {
       const cell = document.createElement('span');
       cell.style.background = band.color;
-      // A band with no upper edge (the top pollen level) reads as "at or above",
-      // rather than borrowing a ceiling the data does not have.
+      // A band with no upper edge reads as "at or above", rather than
+      // borrowing a ceiling the data does not have.
       const range =
         band.to === null || band.to === undefined
           ? `≥ ${full(band.from)}`
@@ -1580,7 +1436,6 @@ function render(data) {
   renderModelLegend();
   if (modelInfo) {
     // All of these carry generated text, so they follow the language.
-    buildAllergySwitch();
     buildModelTabs();
     syncModelHours();
     syncModelPlay();
@@ -1597,14 +1452,14 @@ function render(data) {
 
   // The subtitle is for trouble only -- it used to carry "observation HH:MM",
   // which was wrong whenever the station report was missing and the hour came
-  // from MOSMIX instead. The timestamp lives on the index panel, which knows
-  // which of the two it is showing.
+  // from the forecast instead. The timestamp lives on the index panel, which
+  // knows which of the two it is showing.
   //
   // What it says instead is *which* kind of "not live" this is. One line used to
   // cover all of them by asserting the server could not be reached, which was a
   // guess from the payload's age: a phone with a wrong clock, or a proxy holding
   // a response, got told it was offline when it was not, and a server that was
-  // reached but had no DWD data behind it said nothing at all.
+  // reached but had no upstream data behind it said nothing at all.
   const subtitle = $('subtitle');
   let notice = null;
   if (offlineCopyAt) {
@@ -1612,8 +1467,8 @@ function render(data) {
     // than inferred -- and the age is measured on one clock, this browser's.
     notice = T('app.offlineCopy', { when: EFW_I18N.time(offlineCopyAt) });
   } else if ((data.degraded || []).length) {
-    // We reached the server; the server did not reach DWD, and has no older
-    // copy of that source to fall back on either. See _collect in service.py.
+    // We reached the server; the server did not reach an upstream source, and
+    // has no older copy of it to fall back on either. See _collect in service.py.
     notice = T('app.sourceDown');
   } else if (Date.now() - new Date(data.generated_at).getTime() > STALE_AFTER_MS) {
     notice = T('app.stale', {
@@ -1627,7 +1482,7 @@ function render(data) {
   const stamp = { day: '2-digit', month: '2-digit', year: 'numeric' };
   const meta = [`${T('footer.updated')} ${EFW_I18N.dateTime(data.generated_at, stamp)}`];
   if (data.forecast_issued) {
-    meta.push(`${T('footer.mosmixRun')} ${EFW_I18N.dateTime(data.forecast_issued, stamp)}`);
+    meta.push(`${T('footer.forecastRun')} ${EFW_I18N.dateTime(data.forecast_issued, stamp)}`);
   }
   if (data.degraded.length) meta.push(`⚠️ ${data.degraded.join(', ')}`);
   text($('footer-meta'), meta.join(' · '));
@@ -1699,8 +1554,8 @@ function initOffline() {
 }
 
 /* A tab nobody is looking at does not need a forecast, and a few thousand
-   phones in pockets polling every five minutes is traffic -- ours and DWD's --
-   that buys nothing. It catches up the moment the tab comes back. */
+   phones in pockets polling every five minutes is traffic -- ours and our
+   upstreams' -- that buys nothing. It catches up the moment the tab comes back. */
 function refreshIfDue() {
   // Against our own last attempt, not against the payload's timestamp: a device
   // clock that disagrees with the server's would otherwise decide the data is

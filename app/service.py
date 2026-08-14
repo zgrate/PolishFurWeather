@@ -17,8 +17,7 @@ from zoneinfo import ZoneInfo
 
 from app import fsi
 from app.config import settings
-from app.dwd import mosmix, observations, pollen, radar
-from app.dwd import warnings as dwd_warnings
+from app.providers import poland
 from app.meteo import beaufort, wind_direction_name
 from app.models import WeatherPoint, Warning
 from app.i18n import normalise as normalise_lang
@@ -365,25 +364,22 @@ def _collect(fetch, label: str, default):
 
 def _pollen_here() -> List[Dict[str, Any]]:
     """Today's pollen over the venue, heaviest species first."""
-    return pollen.at_point(settings.location.latitude, settings.location.longitude)
+    return poland.pollen_at_point(settings.location.latitude, settings.location.longitude)
 
 
 def _fill_elapsed_gaps(points: List[WeatherPoint]) -> List[WeatherPoint]:
     """Put back elapsed hours of today that no forecast we hold covers.
 
-    ``mosmix._merge_history`` remembers the hours a newer run dropped, but only
-    for as long as the process lives. After a restart -- a deploy, a reboot, a
-    crash -- today's chart begins wherever the current run begins, so a restart
-    at 17:00 loses the whole morning until midnight retires the day. That is the
-    "the greyed-out hours are sometimes missing" bug: it does not depend on the
-    weather or the hour, only on whether this process happened to be running
-    when those hours went by.
+    Open-Meteo's hourly series starts from whenever it was last fetched, not
+    from local midnight, so the hours between midnight and the first cached
+    point are missing from the chart until this backfills them.
 
-    The POI report already carries the last ~24 h of *measured* hourly readings,
-    so the hole can be filled from what actually happened rather than from
-    memory. Only genuine gaps are filled, so a page load with a complete day
-    fetches nothing extra, and observed hours are never used to overwrite a
-    forecast hour we already have.
+    ``app.providers.imgw.observations`` keeps the last ~24h of *measured*
+    SYNOP readings in SQLite, so the hole can be filled from what actually
+    happened rather than from memory -- and, being on disk, it survives a
+    restart the way an in-process cache would not. Only genuine gaps are
+    filled, so a page load with a complete day fetches nothing extra, and
+    observed hours are never used to overwrite a forecast hour we already have.
     """
     if not points:
         return points
@@ -391,7 +387,7 @@ def _fill_elapsed_gaps(points: List[WeatherPoint]) -> List[WeatherPoint]:
     now = hour_now()
     # Same boundary the forecast parser uses, so the two cannot disagree about
     # where "today" starts.
-    floor = mosmix.day_floor(now).astimezone(timezone.utc)
+    floor = poland.day_floor(now).astimezone(timezone.utc)
 
     have = {p.time for p in points}
     wanted = []
@@ -403,7 +399,7 @@ def _fill_elapsed_gaps(points: List[WeatherPoint]) -> List[WeatherPoint]:
     if not wanted:
         return points
 
-    observed, _ = _collect(observations.fetch_recent, "observations", [])
+    observed, _ = _collect(poland.fetch_recent, "observations", [])
     by_hour = {
         p.time.replace(minute=0, second=0, microsecond=0): p for p in observed or []
     }
@@ -425,12 +421,12 @@ def _fill_elapsed_gaps(points: List[WeatherPoint]) -> List[WeatherPoint]:
 
 def build_summary(lang: str = "en") -> Dict[str, Any]:
     lang = normalise_lang(lang)
-    current_point, current_error = _collect(observations.fetch_current, "observations", None)
+    current_point, current_error = _collect(poland.fetch_current, "observations", None)
     forecast, forecast_error = _collect(
-        mosmix.fetch_forecast, "forecast", {"points": [], "issued": None, "extremes": {}}
+        poland.fetch_forecast, "forecast", {"points": [], "issued": None, "extremes": {}}
     )
     fetched_warnings, warnings_error = _collect(
-        lambda: dwd_warnings.fetch_warnings(lang=lang), "warnings", []
+        lambda: poland.fetch_warnings(lang=lang), "warnings", []
     )
     # What is in the air here, not the map of where it is worst. Only the
     # species in season answer, so this is two file reads in summer and none at
@@ -475,12 +471,11 @@ def build_summary(lang: str = "en") -> Dict[str, Any]:
             "latitude": settings.location.latitude,
             "longitude": settings.location.longitude,
             "timezone": settings.location.timezone,
-            "station_id": settings.dwd.station_id,
-            # The operator's name for the station wins: DWD abbreviates its own
-            # to fit a fixed field, and "HAMBURG-FU." is not a place anyone can
-            # picture. Theirs is the fallback, so an instance that never set one
-            # still says something rather than nothing.
-            "station_name": settings.dwd.station_name or forecast.get("station_name"),
+            "station_id": settings.imgw.station_id,
+            # The operator's configured name wins; Open-Meteo's forecast (the
+            # only source that could suggest one) never names a station, so the
+            # fallback is only ever reached if the operator left this blank.
+            "station_name": settings.imgw.station_name or forecast.get("station_name"),
         },
         "current": _serialise_point(current_point, lang) if current_point else None,
         "fsi": current_fsi.to_dict() if current_fsi else None,
@@ -497,10 +492,13 @@ def build_summary(lang: str = "en") -> Dict[str, Any]:
         # mistaken for one another. `warn` marks the ones heavy enough to say
         # out loud -- see pollen.WARN_FROM_LEVEL.
         "pollen": pollen_here,
-        "radar": radar.radar_info(),
+        "radar": poland.radar_info(),
         "forecast_issued": forecast.get("issued").isoformat()
         if forecast.get("issued")
         else None,
         "degraded": degraded,
-        "attribution": "Data: Deutscher Wetterdienst (DWD) OpenData",
+        "attribution": (
+            "Data: IMGW-PIB (observations, warnings, POLRAD radar) "
+            "and Open-Meteo (forecast, pollen)"
+        ),
     }

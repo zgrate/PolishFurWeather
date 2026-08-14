@@ -1,8 +1,8 @@
 """Tests for the public v1 API -- the contract third parties depend on.
 
-DWD is stubbed so the suite stays offline. These assertions are deliberately
-about *field names and shapes*: if one changes, a consumer breaks, and the test
-should be the thing that notices.
+IMGW/Open-Meteo are stubbed so the suite stays offline. These assertions are
+deliberately about *field names and shapes*: if one changes, a consumer
+breaks, and the test should be the thing that notices.
 """
 
 from __future__ import annotations
@@ -14,12 +14,11 @@ from fastapi.testclient import TestClient
 
 from app import i18n as app_i18n
 from app import main
-from app.dwd import mosmix, observations, pollen
-from app.dwd import warnings as dwd_warnings
-from app.dwd.client import cache, field_cache
 from app.api_v1 import WIND_FACTORS
+from app.config import settings
 from app.main import app
 from app.models import WeatherPoint, Warning
+from app.providers import poland
 
 ENDPOINTS = (
     "/api/v1/fsi",
@@ -31,15 +30,38 @@ ENDPOINTS = (
     "/api/v1/overview",
 )
 
+RADAR_INFO = {
+    "provider": "imgw-polrad",
+    "product": "COMPO_SRI.comp.sri",
+    "available": True,
+    "valid_time": "2026-08-13T12:00:00+00:00",
+    "bbox": {"min_lat": 52.0, "min_lon": 18.0, "max_lat": 54.0, "max_lon": 20.0},
+    "image_url": "/api/radar.png",
+    "attribution": (
+        "Źródłem pochodzenia danych jest Instytut Meteorologii i Gospodarki Wodnej "
+        "– Państwowy Instytut Badawczy."
+    ),
+    "refresh_seconds": 240,
+}
+
 
 @pytest.fixture(autouse=True)
 def clean_state(monkeypatch):
+    from app.providers.http import cache, field_cache
+
     cache.clear()
     field_cache.clear()
     main.limiter.reset()
-    # The summary behind every v1 endpoint reads pollen, which is a file per
-    # species in season. Not from here it is not: the suite stays offline.
-    monkeypatch.setattr(pollen, "at_point", lambda *a, **k: [])
+    # A real venue is left blank in config.json on purpose (see IMGWSettings'
+    # docstring) -- tests stand in a fixture station rather than guessing one.
+    monkeypatch.setattr(settings.imgw, "station_id", "12375")
+    monkeypatch.setattr(settings.imgw, "station_name", "Kraków-Balice")
+    monkeypatch.setattr(settings.imgw, "teryt", ["1261"])
+    # The summary behind every v1 endpoint reads pollen and the radar block,
+    # both of which cost a live fetch. Not from here it is not: the suite
+    # stays offline.
+    monkeypatch.setattr(poland, "pollen_at_point", lambda *a, **k: [])
+    monkeypatch.setattr(poland, "radar_info", lambda *a, **k: dict(RADAR_INFO))
     yield
     cache.clear()
     field_cache.clear()
@@ -68,19 +90,21 @@ def _points(hours: int = 30) -> list[WeatherPoint]:
     ]
 
 
-def _warning(advance: bool = False) -> Warning:
+def _warning() -> Warning:
     now = datetime.now(timezone.utc)
     return Warning(
-        event="Starke Hitze",
+        event="Upał",
         event_en="Heat warning (moderate)",
-        headline="Amtliche WARNUNG vor HITZE",
-        description="Starke Wärmebelastung.",
-        instruction="Trinken Sie ausreichend Wasser.",
+        headline="Ostrzeżenie meteorologiczne: Upał",
+        description="Silne oddziaływanie termiczne.",
+        instruction="Pij odpowiednią ilość wody.",
         severity="moderate",
-        level=50,
+        level=2,
         kind="heat",
-        region="Hansestadt Hamburg",
-        advance=advance,
+        region="Kraków",
+        # IMGW has no "Vorabinformation"-equivalent tier -- advance is always
+        # False for its warnings; see models.Warning's docstring.
+        advance=False,
         start=now,
         end=now + timedelta(hours=6),
         color="#fb8c00",
@@ -90,21 +114,19 @@ def _warning(advance: bool = False) -> Warning:
 @pytest.fixture
 def client(monkeypatch):
     points = _points()
-    monkeypatch.setattr(observations, "fetch_current", lambda *a, **k: points[0])
-    monkeypatch.setattr(observations, "fetch_recent", lambda *a, **k: [])
+    monkeypatch.setattr(poland, "fetch_current", lambda *a, **k: points[0])
+    monkeypatch.setattr(poland, "fetch_recent", lambda *a, **k: [])
     monkeypatch.setattr(
-        mosmix,
+        poland,
         "fetch_forecast",
         lambda *a, **k: {
             "points": points,
             "issued": datetime.now(timezone.utc),
-            "station_name": "HAMBURG-FU.",
+            "station_name": "KRAKOW-BALICE",
             "extremes": {},
         },
     )
-    monkeypatch.setattr(
-        dwd_warnings, "fetch_warnings", lambda *a, **k: [_warning(), _warning(advance=True)]
-    )
+    monkeypatch.setattr(poland, "fetch_warnings", lambda *a, **k: [_warning(), _warning()])
     return TestClient(app)
 
 
@@ -123,7 +145,7 @@ def test_every_endpoint_carries_provenance(client, path):
     """A consumer must be able to tell where the numbers came from."""
     meta = client.get(path).json()["meta"]
     assert meta["event"] and meta["location"] and meta["station_id"]
-    assert "Deutscher Wetterdienst" in meta["attribution"]
+    assert "IMGW" in meta["attribution"]
     assert meta["language"] == "en"
     assert meta["timezone"] == "Europe/Berlin"
 
@@ -219,12 +241,13 @@ def test_a_warning_in_force_does_not_move_the_score(client):
     assert body["caps_applied"] == []  # mild weather, so no heat ceiling either
 
 
-def test_warnings_distinguish_advance_notices(client):
+def test_warnings_carry_the_expected_fields(client):
     body = client.get("/api/v1/warnings").json()
     assert body["count"] == 2
-    assert {w["advance"] for w in body["warnings"]} == {True, False}
+    # IMGW has no "advance notice" tier the way DWD's Vorabinformation is --
+    # every IMGW-sourced warning is always False here, not fabricated.
+    assert {w["advance"] for w in body["warnings"]} == {False}
     for warning in body["warnings"]:
-        # DWD publishes the wording in German; only the heading is translated.
         assert warning["headline"] and warning["label"]
         assert warning["kind"] and warning["severity"]
 
