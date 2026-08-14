@@ -31,31 +31,17 @@
       "stickiness": 0.08
     },
     "thermal_mapping": {
-      "optimal_max": 15.0,
-      "good_max": 17.0,
-      "fair_max": 19.0,
-      "poor_max": 21.0,
-      "bad_max": 23.0
+      "optimal_max": 16.0,
+      "good_max": 18.5,
+      "fair_max": 21.0,
+      "poor_max": 24.0,
+      "bad_max": 27.0
     },
     "thresholds": {
       "excellent": 8.5,
       "good": 7.0,
       "fair": 5.0,
       "poor": 3.0
-    },
-    "heat_caps": {
-      "caution_wetbulb": 24.0,
-      "caution_cap": 3.0,
-      "danger_wetbulb": 27.0,
-      "danger_cap": 1.0
-    },
-    "rain_caps": {
-      "damp_score": 6.5,
-      "damp_cap": 6.0,
-      "wet_score": 4.0,
-      "wet_cap": 4.5,
-      "soaked_score": 2.0,
-      "soaked_cap": 2.5
     }
   },
   "api": {

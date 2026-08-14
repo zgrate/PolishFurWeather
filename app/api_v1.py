@@ -120,7 +120,6 @@ def _fsi(payload: Dict[str, Any]) -> Optional[schemas.FsiNow]:
         band_key=_band_key(raw["score"]),
         color=raw["color"],
         advice=raw["advice"],
-        caps_applied=raw["caps_applied"],
         easter_egg=raw.get("easter_egg"),
         wetbulb_c=raw.get("wetbulb"),
         effective_wetbulb_c=raw.get("effective_wetbulb"),

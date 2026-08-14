@@ -94,43 +94,24 @@ class FSIConfig:
             "stickiness": 0.08,
         }
     )
-    #: Effective wet-bulb temperature (deg C) at the upper edge of each band.
+    #: Effective wet-bulb temperature (deg C) at the upper edge of each band, set
+    #: on the heat-index steps: 18.5 is where "caution" begins (heat index 27 °C),
+    #: 24.0 "extreme caution" (32 °C) and 27.0 "danger" (40 °C). The fursuit is in
+    #: the solar load added before this, not in tighter thresholds here.
     thermal_mapping: Dict[str, float] = field(
         default_factory=lambda: {
-            "optimal_max": 15.0,
-            "good_max": 17.0,
-            "fair_max": 19.0,
-            "poor_max": 21.0,
-            "bad_max": 23.0,
+            "optimal_max": 16.0,
+            "good_max": 18.5,
+            "fair_max": 21.0,
+            "poor_max": 24.0,
+            "bad_max": 27.0,
         }
     )
     thresholds: Dict[str, float] = field(
         default_factory=lambda: {"excellent": 8.5, "good": 7.0, "fair": 5.0, "poor": 3.0}
     )
-    #: Hard ceilings on the total score by effective wet-bulb temperature.
-    #: A weighted average would otherwise let "it is not raining" (10/10) pull a
-    #: dangerously hot hour up into the middle of the scale.
-    heat_caps: Dict[str, float] = field(
-        default_factory=lambda: {
-            "caution_wetbulb": 24.0,
-            "caution_cap": 3.0,
-            "danger_wetbulb": 27.0,
-            "danger_cap": 1.0,
-        }
-    )
-    #: Hard ceilings on the total score by the rain sub-score, which already
-    #: carries both the rate and the chance. Rain is only 30 % of the mean, far
-    #: too little for an hour that ends with a suit too wet to wear.
-    rain_caps: Dict[str, float] = field(
-        default_factory=lambda: {
-            "damp_score": 6.5,
-            "damp_cap": 6.0,
-            "wet_score": 4.0,
-            "wet_cap": 4.5,
-            "soaked_score": 2.0,
-            "soaked_cap": 2.5,
-        }
-    )
+    #: The heat and rain sub-scores are also ceilings on the total -- see
+    #: ``app/fsi.py`` -- so their own mappings above are the only knobs for it.
 
 
 @dataclass

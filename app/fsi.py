@@ -11,9 +11,11 @@ Four weighted sub-scores feed the result:
     wind              U-shaped: still air traps heat, gales knock heads off
     stickiness        dew point, i.e. how clammy the air feels
 
-Dangerous heat and rain then cap the result, because a weighted mean would
-otherwise let a perfect rain score rescue an hour nobody should be suited in --
-and, from the other side, let a mild sunny afternoon carry a wet one.
+The result is then held to the *lower* of that mean and the heat and rain
+sub-scores, because a weighted mean would otherwise let a perfect rain score
+rescue an hour nobody should be suited in -- and, from the other side, let a
+mild sunny afternoon carry a wet one. Neither of those two can be averaged away:
+whichever is worse is the number the hour gets.
 
 Official DWD warnings deliberately do *not* affect the score. They are published
 alongside it -- marked on the hourly bars over the hours they cover -- and left
@@ -247,63 +249,6 @@ def _stickiness_score(point: WeatherPoint, dew: float, lang: str) -> Tuple[float
     return score, f"{t(lang, 'reason.humidity')}: " + ", ".join(reasons)
 
 
-def _apply_heat_cap(score: float, effective_wetbulb: float, lang: str) -> Tuple[float, List[str]]:
-    """Stop a pleasant sub-score from masking dangerous heat.
-
-    Wet-bulb temperature is the number that matters for heat stress: above
-    roughly 28 °C the body can no longer shed heat by sweating, and a fursuit
-    removes most of that margin to begin with. These are hard ceilings on the
-    weighted total, not another averaged term.
-    """
-    caps = settings.fsi.heat_caps
-
-    for threshold, cap, note_key in (
-        (caps["danger_wetbulb"], caps["danger_cap"], "cap.danger"),
-        (caps["caution_wetbulb"], caps["caution_cap"], "cap.caution"),
-    ):
-        if effective_wetbulb >= threshold and cap < score:
-            return cap, [
-                t(
-                    lang,
-                    "cap.heat_detail",
-                    note=t(lang, note_key),
-                    value=f"{effective_wetbulb:.1f}",
-                    cap=f"{cap:g}",
-                )
-            ]
-
-    return score, []
-
-
-def _apply_rain_cap(score: float, precipitation: float, lang: str) -> Tuple[float, List[str]]:
-    """The heat argument from the other side: rain has to outrank a nice day.
-
-    Rain is 30 % of the weighted mean, so on an otherwise perfect afternoon the
-    very worst it can do is take three points off -- and a suit you cannot wear
-    home is not a three point problem. These are ceilings on the total, so the
-    hour is described by the thing that will actually decide it.
-    """
-    caps = settings.fsi.rain_caps
-
-    for threshold, cap, note_key in (
-        (caps["soaked_score"], caps["soaked_cap"], "cap.soaked"),
-        (caps["wet_score"], caps["wet_cap"], "cap.wet"),
-        (caps["damp_score"], caps["damp_cap"], "cap.damp"),
-    ):
-        if precipitation <= threshold and cap < score:
-            return cap, [
-                t(
-                    lang,
-                    "cap.rain_detail",
-                    note=t(lang, note_key),
-                    value=f"{precipitation:.1f}",
-                    cap=f"{cap:g}",
-                )
-            ]
-
-    return score, []
-
-
 def compute(point: WeatherPoint, lang: str = "en") -> FSIResult:
     """Score a single observation or forecast step."""
     temperature = point.temperature
@@ -337,14 +282,13 @@ def compute(point: WeatherPoint, lang: str = "en") -> FSIResult:
         + weights["wind"] * wind
         + weights["stickiness"] * sticky
     )
+    # Heat and rain each decide an hour on their own, so neither is allowed to be
+    # averaged away: the index is the worst of the mean and those two sub-scores.
     # One decimal, not half points: the score is reported to a tenth, which is
     # also what makes the 6.9 / 6.7 easter eggs below reachable at all.
-    total = max(0.0, min(10.0, round(weighted, 1)))
+    total = max(0.0, min(10.0, round(min(weighted, thermal, precipitation), 1)))
 
     effective_wetbulb = round(wetbulb_c + solar_load, 1)
-    total, caps = _apply_heat_cap(total, effective_wetbulb, lang)
-    total, rain_caps = _apply_rain_cap(total, round(precipitation, 1), lang)
-    caps += rain_caps
     label, color, advice = _band(total, lang)
 
     easter_egg = EASTER_EGGS.get(total)
@@ -383,7 +327,6 @@ def compute(point: WeatherPoint, lang: str = "en") -> FSIResult:
                 "reason": sticky_reason,
             },
         },
-        caps_applied=caps,
         easter_egg=easter_egg,
         wetbulb=wetbulb_c,
         effective_wetbulb=effective_wetbulb,
@@ -415,9 +358,5 @@ def compute_series(points: Iterable[WeatherPoint], lang: str = "en") -> List[Dic
                 for key, sub in result.subscores.items()
             },
         }
-        # Only when one fired: a heat ceiling overrides the weighted total, so
-        # without it the four parts of a capped hour do not add up to its score.
-        if result.caps_applied:
-            entry["caps_applied"] = result.caps_applied
         series.append(entry)
     return series

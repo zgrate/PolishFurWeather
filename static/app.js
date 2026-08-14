@@ -218,15 +218,10 @@ function labelsFor(data) {
  * Only for the strip in this card: a bar picked in a day card is several
  * screens further down, where nothing changing up here could be seen at all,
  * so those open their own bars in the panel beside them.
- *
- * The heat caps follow the same hour. They override the weighted total, so on
- * a capped hour the four parts do not add up to the score, and the note saying
- * why has to be the note for the hour on show.
  */
 function syncCardBreakdown() {
   const list = $('subscores');
-  const caps = $('fsi-caps');
-  if (!list || !caps) return;
+  if (!list) return;
 
   const entry = pickedChart === 'timeline' ? conditionsByTime.get(picked) : null;
   // An hour with no forecast behind it has no parts to show; rather than empty
@@ -236,10 +231,6 @@ function syncCardBreakdown() {
   if (!source) return;
 
   renderSubscores(list, source.subscores);
-
-  const applied = source.caps_applied || [];
-  caps.hidden = !applied.length;
-  text(caps, applied.join(' · '));
 
   // Which hour these bars are about. Blank for "now": the heading above the
   // card already carries the time that one was measured at.
@@ -607,16 +598,6 @@ function renderHourDetail(host, entry, breakdown) {
     list.className = 'subscores';
     renderSubscores(list, subscores);
     host.append(heading, list);
-
-    // A heat ceiling overrides the weighted total, so without this the four
-    // bars visibly fail to add up to the score in the corner of the panel.
-    const caps = entry.caps_applied || [];
-    if (caps.length) {
-      const note = document.createElement('p');
-      note.className = 'fsi-caps';
-      note.textContent = caps.join(' · ');
-      host.append(note);
-    }
   }
 
   // Say so plainly, rather than letting a forecast for 09:00 read as advice.

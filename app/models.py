@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 
 def _clean(value: Any) -> Any:
@@ -80,9 +80,6 @@ class FSIResult:
     color: str
     advice: str
     subscores: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    #: Heat ceilings that overrode the weighted total. Official warnings are
-    #: reported next to the index, never folded into it.
-    caps_applied: List[str] = field(default_factory=list)
     #: Set on a couple of specific scores; purely cosmetic.
     easter_egg: Optional[str] = None
     wetbulb: Optional[float] = None

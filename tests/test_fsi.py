@@ -77,18 +77,34 @@ def test_dangerous_heat_is_not_offset_by_dry_calm_weather():
     assert result.effective_wetbulb >= 27.0
     assert result.subscores["precipitation"]["score"] == 10.0  # dry and sunny
     assert result.score <= 1.0
-    assert any("wet-bulb" in cap for cap in result.caps_applied)
+    # The heat sub-score is the ceiling, so the hour scores exactly what it says.
+    assert result.score == result.subscores["thermal_humidity"]["score"]
 
 
-def test_heat_cap_scales_with_severity():
-    caution = fsi.compute(point(hour=12, temperature=29.0, humidity=65.0, wind_speed=2.0))
-    danger = fsi.compute(point(hour=12, temperature=34.0, humidity=80.0, wind_speed=2.0))
-    assert danger.score < caution.score <= 3.0
+def test_heat_holds_the_score_down_wherever_it_is_dangerous():
+    """Both hours are "extreme caution" or worse on the heat index."""
+    for kwargs in (
+        dict(temperature=29.0, humidity=65.0),
+        dict(temperature=34.0, humidity=80.0),
+    ):
+        result = fsi.compute(point(hour=12, wind_speed=2.0, **kwargs))
+        assert result.score == result.subscores["thermal_humidity"]["score"] <= 2.5
+        assert result.label == "Bad"
 
 
-def test_mild_weather_is_untouched_by_the_heat_cap():
+def test_a_warm_sunny_afternoon_is_uncomfortable_not_dangerous():
+    """24 °C in full sun is "extreme caution" on the heat index, not heat stroke.
+
+    The bands used to bottom out here, which put an ordinary warm convention
+    afternoon in the same place as a genuinely unsafe one.
+    """
+    result = fsi.compute(point(hour=12, temperature=24.0, humidity=60.0, cloud_cover=0.0))
+    assert 4.0 <= result.subscores["thermal_humidity"]["score"] <= 6.5
+
+
+def test_mild_weather_is_not_held_down_by_the_heat_score():
     result = fsi.compute(point(temperature=17.0, humidity=60.0))
-    assert not any("wet-bulb" in cap for cap in result.caps_applied)
+    assert result.subscores["thermal_humidity"]["score"] >= 8.5
     assert result.score >= 7.0
 
 
@@ -123,7 +139,8 @@ def test_light_rain_pulls_an_otherwise_perfect_hour_down_to_fair():
         )
     )
     assert drizzle.label == "Fair"
-    assert drizzle.caps_applied  # the ceiling, not the mean, is what said so
+    # The rain sub-score, not the mean, is what said so.
+    assert drizzle.score == drizzle.subscores["precipitation"]["score"]
 
 
 def test_the_rain_ceiling_scales_with_how_wet_the_hour_is():
@@ -257,12 +274,10 @@ def test_every_hour_carries_the_parts_its_score_is_made_of():
         assert "weight" not in part
 
 
-def test_a_capped_hour_says_so_and_an_ordinary_one_stays_quiet():
-    """The parts of a capped hour do not add up to its score; the note is why."""
-    capped = fsi.compute_series([point(hour=13, temperature=38.0, humidity=80.0)])[0]
-    assert capped["caps_applied"]
-
-    assert "caps_applied" not in fsi.compute_series([point(temperature=14.0)])[0]
+def test_a_held_down_hour_scores_the_part_that_held_it():
+    """No note needed: the hour's score is one of the bars the series carries."""
+    hot = fsi.compute_series([point(hour=13, temperature=38.0, humidity=80.0)])[0]
+    assert hot["score"] == hot["subscores"]["thermal_humidity"]["score"]
 
 
 def test_subscore_labels_are_published_once_and_translated():

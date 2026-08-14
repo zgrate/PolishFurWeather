@@ -60,7 +60,6 @@
    amber, where a white wash would vanish. Alphas kept as they were. */
 .no-color-mix .windows .window { background: rgba(0, 0, 0, 0.12); }
 .no-color-mix .subscores .bar { background: rgba(0, 0, 0, 0.18); }
-.no-color-mix .fsi-caps { background: rgba(0, 0, 0, 0.16); }
 .no-color-mix .hour-detail { background: rgba(0, 0, 0, 0.14); }
 .no-color-mix .stat-note { background: rgba(0, 0, 0, 0.14); }
 

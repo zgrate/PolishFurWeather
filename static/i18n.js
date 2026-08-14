@@ -38,7 +38,7 @@ window.EFW_I18N = (function () {
         'The Index ranks the ability to be in a fursuit outdoors, from 0 to 10. It weighs heat stress from the wet-bulb temperature plus sun load, as well as temperature and wind and forecasted rain. Wet-bulb is the temperature your body can get cool down by sweating, so it reads lower than the air temperature. And the closer the two are, the less sweating helps. Dew point is a separate figure and says how clammy the air feels: Usually above 15 °C is uncomfortable. Official warnings don\'t change the score, leaving you to judge.',
       'fsi.weightsHeading': 'How much each part counts',
       'fsi.weightsNote':
-        'Beyond the weighting, there are other limits that adjust the Index. Dangerous heat (>36°C/96°F) sets the Index to 0, for example.',
+        'Beyond the weighting, heat and rain are also ceilings: the Index is never better than the temperature or rain score below it, so neither of the two can be averaged away by a good day otherwise.',
       'fsi.weightsAlt': 'Share of the score carried by each part: {parts}.',
 
       'band.excellent': 'Excellent',
@@ -159,7 +159,7 @@ window.EFW_I18N = (function () {
         'Der Index bewertet von 0 bis 10, wie angenehm und sicher es im Fursuit draußen ist. Er gewichtet die Hitzebelastung aus der Feuchtkugeltemperatur und der Sonneneinstrahlung, zusammen mit Wind und Niederschlagsvorhersage. Die Feuchtkugeltemperatur ist eine Temperatur, den dein Körper durchs Schwitzen  minimal erreichen kann. Sie liegt unter der echten Lufttemperatur, und je näher beide beieinander liegen, desto weniger bringt das Schwitzen. Der Taupunkt ist eine eigene Größe und sagt, wie schwül sich die Luft anfühlt: ab etwa 15 °C wird es klamm. Amtliche Warnungen verändern den Wert nicht: Sie sind über den betroffenen Stunden an den Balken markiert, damit du sie selbst einschätzen kannst.',
       'fsi.weightsHeading': 'Wie sehen die Gewichtungen aus?',
       'fsi.weightsNote':
-        'Über die Gewichtung hinaus gibt es weitere Grenzen, die den Index anpassen. Gefährliche Hitze (>36°C) setzt den Index bspw. auf 0.',
+        'Über die Gewichtung hinaus sind Hitze und Regen auch Obergrenzen: Der Index ist nie besser als der Wert für Temperatur oder Regen darunter, keiner von beiden lässt sich also von einem sonst guten Tag wegmitteln.',
       'fsi.weightsAlt': 'Anteil der einzelnen Faktoren am Gesamtwert: {parts}.',
 
       'band.excellent': 'Ausgezeichnet',

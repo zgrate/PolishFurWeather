@@ -116,20 +116,20 @@ weighted sub-scores feed it:
 
 | Factor | Weight | Why it matters |
 |---|---|---|
-| Temperature | 50 % | **Wet-bulb temperature** plus a sun load. A suit blocks the sweat evaporation your body relies on, so this dominates. |
+| Temperature | 50 % | **Wet-bulb temperature** plus a sun load. A suit blocks the sweat evaporation your body relies on, so this dominates. The bands sit on the [heat index](https://de.wikipedia.org/wiki/Hitzeindex) steps — 18.5 °C effective wet-bulb is where its *caution* begins, 24 °C *extreme caution*, 27 °C *danger* — with the suit in the sun load added before them rather than in tighter thresholds. |
 | Rain | 30 % | Rain rate blended with probability, plus a penalty for ground still wet from the last 24 h. Steep at the bottom: a suit soaks rain up and stays wet, so 0.3 mm in an hour is already a problem. |
 | Wind | 12 % | U-shaped: dead calm turns a suit into an oven, gales are dangerous. Best around 1–3 m/s. |
 | Humidity | 8 % | Dew point. |
 
-**Heat and rain ceilings** then cap the result rather than being averaged into it, so a
-good sub-score can never mask a bad hour: effective wet-bulb ≥ 24 °C caps the index at 3,
-≥ 27 °C caps it at 1. Without this, "it isn't raining" (10/10) would drag a dangerously hot
-hour up into the middle of the scale.
+**Heat and rain are ceilings, not just terms in the mean**, so a good sub-score can never
+mask a bad hour: the index is the *lowest* of the weighted mean, the temperature score and
+the rain score. Without this, "it isn't raining" (10/10) would drag a dangerously hot hour
+up into the middle of the scale — and, the other way round, rain is only 30 % of the mean,
+so on an otherwise perfect afternoon the worst it could do was take three points off. An
+hour that ends with a suit too wet to wear is not a three-point problem.
 
-The same holds the other way round. Rain is 30 % of the mean, so on an otherwise perfect
-afternoon the worst it could do was take three points off, and an hour that ends with a
-suit too wet to wear is not a three-point problem. A rain sub-score of 6.5 or below caps
-the index at 6, 4.0 at 4.5, and 2.0 at 2.5. The chance of rain is folded in as its square
+There is nothing else to read: when heat or rain decides an hour, the index simply equals
+that bar in the breakdown. The chance of rain is folded into the rain score as its square
 root, not raw: being caught out in suit is far worse than a dry hour is good, and it is a
 call you make an hour ahead.
 

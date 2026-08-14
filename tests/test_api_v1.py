@@ -221,7 +221,6 @@ def test_a_warning_in_force_does_not_move_the_score(client):
     assert client.get("/api/v1/warnings").json()["count"] == 2
     assert body["score"] == fsi.compute(_points()[0]).score
     assert body["score"] > 2.0
-    assert body["caps_applied"] == []  # mild weather, so no heat ceiling either
 
 
 def test_warnings_carry_the_expected_fields(client):

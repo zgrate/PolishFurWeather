@@ -372,15 +372,6 @@ body {
 .subscores .fill { display: block; height: 100%; border-radius: 99px; background: currentColor; opacity: 0.85; }
 .subscores .num { text-align: right; font-variant-numeric: tabular-nums; opacity: 0.85; }
 
-.fsi-caps {
-  margin: 0.7rem 0 0;
-  padding: 0.45rem 0.65rem;
-  background: color-mix(in srgb, var(--ink, #000) 16%, transparent);
-  border-radius: 8px;
-  font-size: 0.83rem;
-  font-weight: 600;
-}
-
 .explain { margin-top: 0.8rem; font-size: 0.84rem; opacity: 0.85; }
 .explain summary { cursor: pointer; font-weight: 600; }
 .explain p { margin: 0.5rem 0 0; }
@@ -983,7 +974,6 @@ body {
    over nothing. */
 .hour-detail .subscores-head { margin-top: 0.75rem; }
 .hour-detail .subscores .bar { background: color-mix(in srgb, var(--text) 16%, transparent); }
-.hour-detail .fsi-caps { background: color-mix(in srgb, var(--text) 14%, transparent); }
 
 /* Inside the tinted panel the field labels have to follow the contrast ink --
    the muted grey they use elsewhere is unreadable on amber or green. */

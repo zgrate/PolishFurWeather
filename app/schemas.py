@@ -72,13 +72,6 @@ class FsiNow(BaseModel):
     band_key: str = Field(examples=["fair"])
     color: str
     advice: str
-    caps_applied: List[str] = Field(
-        default_factory=list,
-        description=(
-            "Heat ceilings that overrode the weighted score. Official warnings do "
-            "not affect the score -- see /api/v1/warnings for those."
-        ),
-    )
     easter_egg: Optional[str] = Field(default=None, description="Cosmetic only")
     wetbulb_c: Optional[float] = None
     effective_wetbulb_c: Optional[float] = Field(

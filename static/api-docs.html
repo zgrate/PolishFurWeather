@@ -47,7 +47,6 @@
   "band_key": "excellent",
   "color": "#40ad3e",
   "advice": "Perfect suiting conditions. Touch grass and enjoy the festival!",
-  "caps_applied": [],
   "wetbulb_c": 16.8,
   "effective_wetbulb_c": 16.8,
   "subscores": [ … ],
@@ -155,11 +154,12 @@
       </table>
     </div>
     <p>
-      <strong>It is not just a weighted mean.</strong> Dangerous heat puts a hard
-      ceiling on the score: an effective wet-bulb of 24 °C caps it at 3, and 27 °C
-      caps it at 1. Without that, a perfect "it is not raining" would drag a
-      genuinely unsafe hour up into the middle of the scale. Any ceiling that
-      fired is named in <code>caps_applied</code>.
+      <strong>It is not just a weighted mean.</strong> The score is the lower of
+      that mean and the <code>thermal_humidity</code> and
+      <code>precipitation</code> sub-scores, so neither dangerous heat nor rain
+      can be averaged away: without that, a perfect "it is not raining" would drag
+      a genuinely unsafe hour up into the middle of the scale. When one of the two
+      bites, the score is simply equal to that sub-score.
     </p>
     <h3>Switch on <code>band_key</code>, not <code>band</code></h3>
     <p>
