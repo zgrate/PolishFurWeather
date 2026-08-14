@@ -12,14 +12,9 @@ services:
       - "8000:8000"
     mem_limit: 1g
     environment:
-      # Required: this venue's IMGW SYNOP station and powiat TERYT code(s).
-      # Left blank on purpose -- see app/config.py's IMGWSettings docstring
-      # for where to look these up. The app starts without them but
-      # observations/warnings stay unavailable until they are set.
-      EFW_IMGW_STATION_ID: ""          # e.g. "12500" (Krakow-Balice)
-      EFW_IMGW_STATION_NAME: ""        # e.g. "Krakow-Balice"
-      EFW_IMGW_TERYT: ""               # comma-separated powiat TERYT code(s)
-      EFW_LOCATION_NAME: ""            # venue city, shown in the UI
+      # IMGW SYNOP station and powiat TERYT code(s) -- values come from
+      # config.json's 'imgw' block unless overridden here. Only set these
+      # EFW_* vars if you need to override config.json for this deployment.
       EFW_FORECAST_HOURS: "120"
       EFW_BUSY_AT: "40"
       EFW_CROWDED_AT: "80"
