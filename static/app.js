@@ -915,6 +915,18 @@ function render(data) {
   const shortName = event.short_name || event.name;
   if (shortName) text($('event-name'), shortName);
   text($('where'), data.location.name);
+  if (data.site_name) document.title = `${data.site_name}: Main page`;
+
+  // Wording, channel name and link all come from notifications.* in
+  // config.json (see service.build_summary), so a fork can point this at its
+  // own announcements channel without touching markup.
+  const notifications = data.notifications;
+  if (notifications) {
+    text($('footer-disclaimer'), notifications.disclaimer);
+    const link = $('footer-notifications');
+    text(link, notifications.channel_name);
+    link.href = notifications.telegram_url;
+  }
 
   // The subtitle is for trouble only -- it used to carry "observation HH:MM",
   // which was wrong whenever the station report was missing and the hour came

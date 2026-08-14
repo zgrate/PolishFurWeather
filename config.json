@@ -69,6 +69,19 @@
     "forecast": 1800,
     "warnings": 180
   },
+  "legal": {
+    "privacy_url": "https://help.eurofurence.org/legal/privacy"
+  },
+  "notifications": {
+    "telegram_url": "https://t.me/efnotifications",
+    "channel_name": "Eurofurence Notifications",
+    "disclaimer": {
+      "en": "Official Eurofurence site. Always follow the official warnings, and for convention announcements the official Telegram channel:",
+      "de": "Offizielle Eurofurence-Seite. Befolge stets die amtlichen Warnungen, und für Ansagen der Convention den offiziellen Telegram-Kanal:",
+      "pl": "Oficjalna strona Eurofurence. Zawsze stosuj się do oficjalnych ostrzeżeń, a po ogłoszenia dotyczące konwentu sprawdzaj oficjalny kanał Telegram:"
+    }
+  },
+  "site_name": "Eurofurence Weather",
   "forecast_hours": 120,
   "request_timeout": 20
 }

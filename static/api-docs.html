@@ -272,7 +272,7 @@ X-RateLimit-Remaining: 97</code></pre>
       <code>meta.attribution</code> of every response.
     </p>
     <p>
-      This is the official Eurofurence weather site. It is not an official IMGW
+      This is the official <span id="ef-event-name">Eurofurence</span> weather site. It is not an official IMGW
       or Open-Meteo service, and the index is advice, not a safety certification:
       <strong>heat exhaustion is real, and no number replaces your
       own judgement or a headless break.</strong> Please do not lean on it for
@@ -313,6 +313,19 @@ X-RateLimit-Remaining: 97</code></pre>
       hosts[i].textContent = here;
     }
   })();
+
+  // The site's brand (site_name) and the convention it watches (event) are
+  // both configurable -- app/config.py -- so a fork does not ship a page
+  // that still calls itself "Eurofurence" under the hood.
+  fetch('/api/health').then(function (r) { return r.json(); }).then(function (data) {
+    if (data.site_name) document.title = data.site_name + ': API';
+    if (data.event) {
+      var evName = document.getElementById('ef-event-name');
+      if (evName) evName.textContent = data.event;
+      var desc = document.querySelector('meta[name="description"]');
+      if (desc) desc.content = desc.content.replace('Eurofurence', data.event);
+    }
+  }).catch(function () {});
 </script>
 </body>
 </html>

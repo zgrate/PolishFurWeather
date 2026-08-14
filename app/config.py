@@ -197,6 +197,43 @@ class CacheTTL:
 
 
 @dataclass
+class LegalSettings:
+    """Where the privacy notice actually lives.
+
+    The site runs on Eurofurence e.V. infrastructure by default, so their
+    notice is the one that governs it -- link it rather than keeping a second,
+    drifting copy here. A fork not hosted there must point this at its own.
+    """
+
+    privacy_url: str = "https://help.eurofurence.org/legal/privacy"
+
+
+@dataclass
+class NotificationsSettings:
+    """The convention-announcements channel plugged into the footer disclaimer.
+
+    A fork watching a different convention (or a community running its own
+    channel alongside the official one) needs its own link, label and wording
+    here -- same reasoning as ``LegalSettings.privacy_url``.
+    """
+
+    telegram_url: str = "https://t.me/efnotifications"
+    channel_name: str = "Eurofurence Notifications"
+    disclaimer: Dict[str, str] = field(
+        default_factory=lambda: {
+            "en": "Official Eurofurence site. Always follow the official warnings, "
+            "and for convention announcements the official Telegram channel:",
+            "de": "Offizielle Eurofurence-Seite. Befolge stets die amtlichen "
+            "Warnungen, und für Ansagen der Convention den offiziellen "
+            "Telegram-Kanal:",
+            "pl": "Oficjalna strona Eurofurence. Zawsze stosuj się do oficjalnych "
+            "ostrzeżeń, a po ogłoszenia dotyczące konwentu sprawdzaj oficjalny "
+            "kanał Telegram:",
+        }
+    )
+
+
+@dataclass
 class Settings:
     event: Event = field(default_factory=Event)
     location: Location = field(default_factory=Location)
@@ -208,9 +245,14 @@ class Settings:
     capacity: CapacitySettings = field(default_factory=CapacitySettings)
     pollen: PollenSettings = field(default_factory=PollenSettings)
     cache: CacheTTL = field(default_factory=CacheTTL)
+    legal: LegalSettings = field(default_factory=LegalSettings)
+    notifications: NotificationsSettings = field(default_factory=NotificationsSettings)
     forecast_hours: int = 120
     request_timeout: int = 20
     user_agent: str = "EurofurenceWeather/2.0 (+https://github.com/laffiesphere/EurofurenceWeather)"
+    #: The site's own brand, distinct from ``event.name`` -- this is "who runs
+    #: the page", the event is "which convention it's watching right now".
+    site_name: str = "Eurofurence Weather"
 
 
 def _merge(target: Any, data: Dict[str, Any]) -> None:
@@ -246,7 +288,9 @@ def load_settings(path: str | os.PathLike[str] | None = None) -> Settings:
         _merge(settings.capacity, raw.get("capacity", {}))
         _merge(settings.pollen, raw.get("pollen", {}))
         _merge(settings.cache, raw.get("cache", {}))
-        for key in ("forecast_hours", "request_timeout"):
+        _merge(settings.legal, raw.get("legal", {}))
+        _merge(settings.notifications, raw.get("notifications", {}))
+        for key in ("forecast_hours", "request_timeout", "site_name"):
             if key in raw:
                 setattr(settings, key, raw[key])
         logger.info("Loaded config from %s", config_path)
@@ -268,6 +312,8 @@ def load_settings(path: str | os.PathLike[str] | None = None) -> Settings:
         settings.location.name = name
     if event := os.environ.get("EFW_EVENT_NAME"):
         settings.event.name = event
+    if site_name := os.environ.get("EFW_SITE_NAME"):
+        settings.site_name = site_name
     if hours := os.environ.get("EFW_FORECAST_HOURS"):
         settings.forecast_hours = int(hours)
     if limit := os.environ.get("EFW_RATE_LIMIT"):

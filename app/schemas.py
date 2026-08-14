@@ -251,6 +251,7 @@ class SiteLoad(BaseModel):
 
 class Health(BaseModel):
     status: str
+    site_name: str
     event: str
     location: str
     station: str

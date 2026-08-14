@@ -315,6 +315,7 @@ async function load() {
     latest = data;
     if (data.bands) EFW.setBands(data.bands);
     if (data.event?.name) setText('event-name', data.event.name);
+    if (data.site_name) document.title = `${data.site_name}: ConOps Display`;
 
     // Unhide before drawing: the chart measures itself as it draws, and inside
     // a hidden screen every one of those measurements comes back zero.

@@ -110,9 +110,6 @@ window.EFW_I18N = (function () {
       'footer.mapData': 'Map data',
       'footer.display': 'ConOps display',
       'footer.api': 'Weather API',
-      'footer.disclaimer':
-        'Official Eurofurence site. Always follow the official warnings, and for convention announcements the official Telegram channel:',
-      'footer.notifications': 'Eurofurence Notifications',
       'footer.builtBy': 'Built by',
       'footer.source': 'github',
       'footer.polishVersion': 'Polish version by',
@@ -228,9 +225,6 @@ window.EFW_I18N = (function () {
       'footer.mapData': 'Kartendaten',
       'footer.display': 'ConOps-Anzeige',
       'footer.api': 'Wetter-API',
-      'footer.disclaimer':
-        'Offizielle Eurofurence-Seite. Befolge stets die amtlichen Warnungen, und für Ansagen der Convention den offiziellen Telegram-Kanal:',
-      'footer.notifications': 'Eurofurence Notifications',
       'footer.builtBy': 'Gebaut von',
       'footer.source': 'github',
       'footer.polishVersion': 'Polnische Version von',
@@ -346,9 +340,6 @@ window.EFW_I18N = (function () {
       'footer.mapData': 'Dane mapy',
       'footer.display': 'Wyświetlacz ConOps',
       'footer.api': 'API pogodowe',
-      'footer.disclaimer':
-        'Oficjalna strona Eurofurence. Zawsze stosuj się do oficjalnych ostrzeżeń, a po ogłoszenia dotyczące konwentu sprawdzaj oficjalny kanał Telegram:',
-      'footer.notifications': 'Eurofurence Notifications',
       'footer.builtBy': 'Stworzone przez',
       'footer.source': 'github',
       'footer.polishVersion': 'Polska wersja przez',

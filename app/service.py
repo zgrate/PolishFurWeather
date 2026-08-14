@@ -465,6 +465,13 @@ def build_summary(lang: str = "en") -> Dict[str, Any]:
         # What the four parts of the score are called. Once, rather than on
         # every hour of the series that carries them -- see compute_series.
         "subscore_labels": fsi.subscore_labels(lang),
+        "site_name": settings.site_name,
+        "notifications": {
+            "telegram_url": settings.notifications.telegram_url,
+            "channel_name": settings.notifications.channel_name,
+            "disclaimer": settings.notifications.disclaimer.get(lang)
+            or settings.notifications.disclaimer.get("en"),
+        },
         "event": {"name": settings.event.name, "short_name": settings.event.short_name},
         "location": {
             "name": settings.location.name,

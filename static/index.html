@@ -196,19 +196,18 @@
     <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a>, © CARTO.
     · <a href="/display" data-i18n="footer.display">ConOps display</a>
     · <a href="/api-docs" data-i18n="footer.api">Weather API</a>
-    <!-- The site runs on Eurofurence e.V. infrastructure, so their notice is the
-         one that governs it: link it rather than keeping a second, drifting copy
-         of the same statement here. It is bilingual on their side, so there is
-         nothing for the language switch to do. -->
-    · <a href="https://help.eurofurence.org/legal/privacy" rel="noopener" data-i18n="footer.privacy">Privacy</a>
+    <!-- /privacy redirects to legal.privacy_url from config.json, so the
+         destination stays configurable without touching this page. -->
+    · <a href="/privacy" rel="noopener" data-i18n="footer.privacy">Privacy</a>
     · <a href="https://forms.gle/LMTQHvd5frtd7QJH6" target="_blank" rel="noopener noreferrer" data-i18n="footer.feedback">Feedback</a>
   </p>
-  <!-- The disclaimer carries a link, so it cannot be one data-i18n string:
-       apply() writes textContent and would eat the anchor. Text and link are
-       separate spans instead. -->
+  <!-- Wording, channel name and link all come from notifications.* in
+       config.json (see service.build_summary) so a fork can point this at its
+       own announcements channel without touching markup. Filled in by
+       render() in app.js; the text below is only the pre-fetch placeholder. -->
   <p class="disclaimer">
-    <span data-i18n="footer.disclaimer"></span>
-    <a href="https://t.me/efnotifications" rel="noopener" data-i18n="footer.notifications">Eurofurence Notifications</a>
+    <span id="footer-disclaimer"></span>
+    <a id="footer-notifications" href="https://t.me/efnotifications" rel="noopener">Eurofurence Notifications</a>
   </p>
   <p>
     <span data-i18n="footer.builtBy">Built by</span> <strong>Laffie @laffiesphere</strong> ·

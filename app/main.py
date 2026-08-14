@@ -151,6 +151,7 @@ def site_load() -> JSONResponse:
 def health() -> dict:
     return {
         "status": "ok",
+        "site_name": settings.site_name,
         "event": settings.event.name,
         "station": settings.imgw.station_id,
         "location": settings.location.name,
@@ -205,9 +206,6 @@ def display() -> FileResponse:
     return FileResponse(STATIC_DIR / "display.html", headers={"Cache-Control": REVALIDATE})
 
 
-PRIVACY_URL = "https://help.eurofurence.org/legal/privacy"
-
-
 @app.get("/privacy", include_in_schema=False)
 @app.get("/datenschutz", include_in_schema=False)
 def privacy() -> RedirectResponse:
@@ -216,7 +214,7 @@ def privacy() -> RedirectResponse:
     307 rather than 301: a permanent redirect is cached by browsers effectively
     forever, and the destination is not ours to be that certain about.
     """
-    return RedirectResponse(PRIVACY_URL, status_code=307)
+    return RedirectResponse(settings.legal.privacy_url, status_code=307)
 
 
 @app.get("/api-docs", include_in_schema=False)
