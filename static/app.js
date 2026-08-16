@@ -1010,11 +1010,20 @@ async function load() {
 
 /* Bar widths, how sparsely the icons are drawn and which range labels still fit
    are all measured at render time, so a resize has to redraw rather than
-   reflow. Debounced: a drag fires this continuously. */
+   reflow. Debounced: a drag fires this continuously.
+   Width only: a mobile browser's toolbar hiding/showing while the page is
+   dragged fires resize with the width unchanged, and re-rendering then would
+   blow away and rebuild the DOM mid-scroll, which the browser reads as the
+   page having shrunk and jumps the scroll position to compensate. */
 let resizeTimer = null;
+let lastResizeWidth = window.innerWidth;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => latest && render(latest), 200);
+  resizeTimer = setTimeout(() => {
+    if (window.innerWidth === lastResizeWidth) return;
+    lastResizeWidth = window.innerWidth;
+    latest && render(latest);
+  }, 200);
 });
 
 /* The offline copy. Registered after load so it never competes with the first

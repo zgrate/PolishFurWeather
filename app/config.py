@@ -206,6 +206,8 @@ class LegalSettings:
     """
 
     privacy_url: str = "https://help.eurofurence.org/legal/privacy"
+    #: Feedback form -- same reasoning as privacy_url, a fork wants its own.
+    feedback_url: str = "https://forms.gle/LMTQHvd5frtd7QJH6"
 
 
 @dataclass

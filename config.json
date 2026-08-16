@@ -70,7 +70,8 @@
     "warnings": 180
   },
   "legal": {
-    "privacy_url": "https://help.eurofurence.org/legal/privacy"
+    "privacy_url": "https://help.eurofurence.org/legal/privacy",
+    "feedback_url": "https://forms.gle/LMTQHvd5frtd7QJH6"
   },
   "notifications": {
     "telegram_url": "https://t.me/efnotifications",

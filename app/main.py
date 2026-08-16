@@ -217,6 +217,12 @@ def privacy() -> RedirectResponse:
     return RedirectResponse(settings.legal.privacy_url, status_code=307)
 
 
+@app.get("/feedback", include_in_schema=False)
+def feedback() -> RedirectResponse:
+    """Same reasoning as /privacy: keep the destination out of the page."""
+    return RedirectResponse(settings.legal.feedback_url, status_code=307)
+
+
 @app.get("/api-docs", include_in_schema=False)
 def api_docs() -> FileResponse:
     """Human-readable API notes. /docs stays the generated, interactive reference.
