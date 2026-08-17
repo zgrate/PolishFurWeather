@@ -421,9 +421,16 @@ def _fill_elapsed_gaps(points: List[WeatherPoint]) -> List[WeatherPoint]:
 
 def build_summary(lang: str = "en") -> Dict[str, Any]:
     lang = normalise_lang(lang)
-    current_point, current_error = _collect(poland.fetch_current, "observations", None)
     forecast, forecast_error = _collect(
         poland.fetch_forecast, "forecast", {"points": [], "issued": None, "extremes": {}}
+    )
+    # Fetched first and handed to fetch_current below, so the headline card
+    # borrows its weather_code from the exact same Open-Meteo series the
+    # hourly chart is drawn from, rather than a second independent fetch that
+    # can disagree with the chart about whether this hour is a thunderstorm.
+    forecast_points = forecast.get("points", [])
+    current_point, current_error = _collect(
+        lambda: poland.fetch_current(forecast_points=forecast_points), "observations", None
     )
     fetched_warnings, warnings_error = _collect(
         lambda: poland.fetch_warnings(lang=lang), "warnings", []

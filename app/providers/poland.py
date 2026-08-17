@@ -56,17 +56,37 @@ def _nearest_point(points: List[WeatherPoint], moment: datetime) -> Optional[Wea
     return min(points, key=lambda p: abs((p.time - moment).total_seconds()))
 
 
-def _with_open_meteo_extras(point: WeatherPoint, lat: float, lon: float) -> WeatherPoint:
-    """Fills ``wind_gust``/``weather_code`` from Open-Meteo's nearest hourly point.
+def _with_open_meteo_extras(
+    point: WeatherPoint,
+    lat: float,
+    lon: float,
+    forecast_points: Optional[List[WeatherPoint]] = None,
+) -> WeatherPoint:
+    """Fills ``wind_gust``/``weather_code``/rain chance from Open-Meteo's nearest hour.
 
-    SYNOP never reports either field at all (see ``app/providers/imgw/observations.py``),
-    so borrow them from the same Open-Meteo series already fetched for the forecast
-    card instead of leaving "porywy"/"warunki" permanently blank on the frontend.
+    SYNOP never reports wind gust, weather code, or a chance of rain at all
+    (see ``app/providers/imgw/observations.py``), and POLRAD only ever answers
+    "how hard is it raining this instant" -- never "how likely". Left alone,
+    a radar miss (no fresh frame, point outside coverage) reads as a
+    confident 0 mm/h and 0% chance, which lets ``_precipitation_score`` score
+    a thunderstorm hour "excellent" purely because the live radar frame
+    happened to be dry or missing. Borrowing the forecast's own rate and
+    probability for a miss keeps the headline card's rain read consistent
+    with the hourly chart instead of quietly defaulting to "no rain".
+
+    ``forecast_points``, when given, is that already-fetched series -- the exact
+    one the hourly chart is drawn from. Without it this used to run its own
+    second fetch, which can land on a different cached Open-Meteo payload than
+    the chart's and hand the headline card a different weather_code (thunder
+    vs. not) for what is supposed to be the same hour.
     """
-    if point.wind_gust is not None and point.weather_code is not None:
+    need_extras = point.wind_gust is None or point.weather_code is None
+    need_rain = point.precipitation is None or point.precipitation_prob is None
+    if not (need_extras or need_rain):
         return point
 
-    forecast_points = open_meteo_forecast.fetch_forecast(lat, lon)
+    if forecast_points is None:
+        forecast_points = open_meteo_forecast.fetch_forecast(lat, lon)
     nearest = _nearest_point(forecast_points, point.time)
     if nearest is None:
         return point
@@ -77,6 +97,12 @@ def _with_open_meteo_extras(point: WeatherPoint, lat: float, lon: float) -> Weat
         filled = True
     if point.weather_code is None and nearest.weather_code is not None:
         point.weather_code = nearest.weather_code
+        filled = True
+    if point.precipitation is None and nearest.precipitation is not None:
+        point.precipitation = nearest.precipitation
+        filled = True
+    if point.precipitation_prob is None and nearest.precipitation_prob is not None:
+        point.precipitation_prob = nearest.precipitation_prob
         filled = True
     if filled:
         point.source = f"{point.source}+open-meteo"
@@ -102,12 +128,16 @@ def _with_radar_precipitation(point: WeatherPoint, lat: float, lon: float) -> We
     return point
 
 
-def fetch_current(lat: Optional[float] = None, lon: Optional[float] = None) -> WeatherPoint:
+def fetch_current(
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    forecast_points: Optional[List[WeatherPoint]] = None,
+) -> WeatherPoint:
     lat = lat if lat is not None else settings.location.latitude
     lon = lon if lon is not None else settings.location.longitude
     point = synop.fetch_current()
     point = _with_radar_precipitation(point, lat, lon)
-    return _with_open_meteo_extras(point, lat, lon)
+    return _with_open_meteo_extras(point, lat, lon, forecast_points)
 
 
 def fetch_recent() -> List[WeatherPoint]:
